@@ -1,0 +1,71 @@
+# The Open 2026 — Snake Draft Pool
+
+Single-page static site (plain HTML/CSS/JS, no build step) for a 7-owner snake draft pool
+for the 2026 Open Championship. Shared state lives in Firebase Realtime Database; live
+scores come from ESPN's public golf leaderboard API.
+
+## How it works
+
+- **Owners**: Ram, Dragon, Gary, GF, Ronnie, Phillips, Ace. Each opens the site and claims
+  their seat from the dropdown (stored in the shared DB; a seat can only be claimed once).
+- **Draft**: 7 rounds × 7 teams = 49 picks, snake order. The admin sets the round-1 order
+  before starting. The big banner and the browser tab title always show who is on the clock.
+- **Scoring**: after the draft completes, the page polls ESPN every 3 minutes.
+  A golfer's total = sum of round strokes; a golfer who misses the cut (or WDs/DQs)
+  scores **80** for each unplayed round (rounds 3–4 per the pool rule).
+  - *Best Golfer* table: teams ranked by their single best golfer's total.
+  - *Team Average* table: teams ranked by the average total across all 7 golfers.
+  - The full official tournament leaderboard renders below the league standings.
+- Roster golfers that fail to match ESPN's leaderboard by normalized name are flagged;
+  fix them in **Admin → Scoring Fixes** with an exact ESPN name mapping or a manual
+  total-score override.
+
+## Admin
+
+Open the **Admin** tab and enter the passphrase.
+
+- **Draft Setup**: set the round-1 draft order; paste the tournament field, one golfer per
+  line as `Name, +odds` (odds optional).
+- **Draft Control**: start draft, undo last pick, reset draft (keeps field & seats),
+  full reset (erases everything except the admin passphrase hash).
+- **Scoring Fixes**: per-golfer ESPN name mapping and manual score override.
+- To point scoring at a different tournament, set `/state/espnEventId` in the DB to another
+  ESPN golf event id (defaults to `401811957`, The Open 2026). Both reset buttons clear it.
+- To change the passphrase: compute `sha256(newPass)` (hex), update `ADMIN_HASH` in
+  `app.js`, and set `/admin/passHash` in the DB to the same value.
+
+## ESPN API (verified 2026-07-12)
+
+```
+https://site.web.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=401811957
+```
+
+CORS is open (`access-control-allow-origin: *`). Shape:
+`events[0].competitions[0].competitors[]`, each with `athlete.displayName`,
+`linescores[{period, value}]` (per-round strokes), `score{value, displayValue}`,
+`status.type.name` (`STATUS_CUT`, `STATUS_FINISH`, …), `status.position.displayName`,
+and `sortOrder` (leaderboard position).
+
+## Notifications
+
+No automated notifications yet. When a pick is made, the submitting client calls
+`notifyPickMade(pick)` in `app.js` — add any webhook/SMS/Slack integration in that one
+function.
+
+## Firebase security rules
+
+`firebase-rules.json` holds the production rules: public reads (except `/admin`),
+validated writes — seats are claim-once, picks are only accepted from the seat that is
+actually on the clock at the current pick index, and everything else requires the admin
+passphrase. The rules rely on **Anonymous Authentication**, so before applying them:
+
+1. Firebase console → Authentication → Sign-in method → enable **Anonymous**.
+2. Firebase console → Realtime Database → Rules → paste `firebase-rules.json` → Publish.
+
+The admin proves the passphrase by writing its hash to `/admin/authorized/{uid}`, which
+the rules compare against the (unreadable) `/admin/passHash`.
+
+## Local development
+
+Serve the directory with any static file server, e.g. `python -m http.server 8123`,
+then open `http://localhost:8123/`. No build step.

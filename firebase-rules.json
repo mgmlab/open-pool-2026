@@ -1,0 +1,59 @@
+{
+  "rules": {
+    "admin": {
+      "passHash": { ".read": false, ".write": false },
+      "authorized": {
+        "$uid": {
+          ".write": "auth != null && $uid === auth.uid && newData.val() === root.child('admin/passHash').val()"
+        }
+      }
+    },
+    "state": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "phase": {
+        ".write": "auth != null && newData.val() === 'complete' && root.child('state/currentPick').val() === 48",
+        ".validate": "newData.val() === 'setup' || newData.val() === 'draft' || newData.val() === 'complete'"
+      },
+      "currentPick": {
+        ".write": "auth != null && root.child('state/phase').val() === 'draft' && data.isNumber() && newData.val() === data.val() + 1 && newData.val() <= 49",
+        ".validate": "newData.isNumber()"
+      }
+    },
+    "seats": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$owner": {
+        ".write": "auth != null && !data.exists() && newData.val() === auth.uid",
+        ".validate": "$owner === 'Ram' || $owner === 'Dragon' || $owner === 'Gary' || $owner === 'GF' || $owner === 'Ronnie' || $owner === 'Phillips' || $owner === 'Ace'"
+      }
+    },
+    "golfers": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()"
+    },
+    "schedule": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()"
+    },
+    "overrides": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()"
+    },
+    "picks": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$key": {
+        ".write": "auth != null && !data.exists() && root.child('state/phase').val() === 'draft' && root.child('schedule').child($key).child('idx').val() === root.child('state/currentPick').val() && newData.child('owner').val() === root.child('schedule').child($key).child('owner').val() && root.child('seats').child(newData.child('owner').val()).val() === auth.uid",
+        ".validate": "newData.hasChildren(['idx', 'owner', 'gid', 'name']) && newData.child('idx').val() === root.child('state/currentPick').val()"
+      }
+    },
+    "pickedGolfers": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$gid": {
+        ".write": "auth != null && !data.exists() && root.child('golfers').child($gid).exists() && newData.val() === root.child('state/currentPick').val()"
+      }
+    }
+  }
+}

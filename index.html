@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Pool 2026</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="header-row">
+    <h1>⛳ The Open 2026 &mdash; Snake Draft Pool</h1>
+    <div id="connStatus" class="conn">connecting&hellip;</div>
+  </div>
+  <div id="banner" class="banner hidden"></div>
+</header>
+
+<div id="seatBar" class="seat-bar">
+  <span id="seatInfo"></span>
+  <select id="seatSelect" class="hidden"></select>
+  <button id="claimBtn" class="hidden">Claim seat</button>
+</div>
+
+<nav id="tabs">
+  <button data-tab="draft" class="tab active">Draft</button>
+  <button data-tab="standings" class="tab">Standings</button>
+  <button data-tab="admin" class="tab">Admin</button>
+</nav>
+
+<main>
+  <!-- ============ DRAFT TAB ============ -->
+  <section id="tab-draft">
+    <div class="draft-layout">
+      <div class="panel" id="pickPanel">
+        <h2>Available Golfers <span id="availCount" class="muted"></span></h2>
+        <input type="search" id="golferSearch" placeholder="Search golfers&hellip;" autocomplete="off">
+        <div id="golferList" class="golfer-list"></div>
+      </div>
+      <div class="panel grow">
+        <h2>Draft Board</h2>
+        <div class="table-wrap"><table id="board"></table></div>
+        <h3>Pick History</h3>
+        <div id="pickLog" class="pick-log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STANDINGS TAB ============ -->
+  <section id="tab-standings" class="hidden">
+    <div class="standings-meta">
+      <span id="scoreStatus" class="muted"></span>
+      <button id="refreshScores">Refresh now</button>
+    </div>
+    <div id="unmatchedWarn" class="warn hidden"></div>
+    <div class="standings-layout">
+      <div class="panel grow">
+        <h2>🏆 Best Golfer</h2>
+        <p class="muted small">Teams ranked by their single best golfer's total score</p>
+        <div class="table-wrap"><table id="bestTable"></table></div>
+      </div>
+      <div class="panel grow">
+        <h2>📊 Team Average</h2>
+        <p class="muted small">Teams ranked by average total across all 7 golfers</p>
+        <div class="table-wrap"><table id="avgTable"></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Team Rosters &amp; Scores</h2>
+      <div id="rosterScores" class="roster-grid"></div>
+    </div>
+    <div class="panel">
+      <h2>Official Tournament Leaderboard</h2>
+      <div class="table-wrap"><table id="leaderboard"></table></div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN TAB ============ -->
+  <section id="tab-admin" class="hidden">
+    <div id="adminLock" class="panel narrow">
+      <h2>Admin</h2>
+      <input type="password" id="adminPass" placeholder="Passphrase">
+      <button id="adminUnlock">Unlock</button>
+      <div id="adminErr" class="warn hidden"></div>
+    </div>
+    <div id="adminPanel" class="hidden">
+      <div class="panel">
+        <h2>Draft Setup</h2>
+        <h3>Draft order (round 1; snakes each round)</h3>
+        <div id="orderSelects" class="order-row"></div>
+        <button id="saveOrder">Save order</button>
+        <h3>Golfer field</h3>
+        <p class="muted small">One per line: <code>Name, +odds</code> (odds optional, e.g. <code>Scottie Scheffler, +450</code>)</p>
+        <textarea id="fieldInput" rows="10" placeholder="Scottie Scheffler, +450&#10;Rory McIlroy, +700&#10;Jon Rahm"></textarea>
+        <button id="saveField">Save field</button>
+        <span id="fieldInfo" class="muted"></span>
+      </div>
+      <div class="panel">
+        <h2>Draft Control</h2>
+        <div class="btn-row">
+          <button id="startDraft" class="primary">Start draft</button>
+          <button id="undoPick">Undo last pick</button>
+          <button id="resetDraft" class="danger">Reset draft (keep field &amp; seats)</button>
+          <button id="fullReset" class="danger">Full reset (everything)</button>
+        </div>
+        <h3>Seats</h3>
+        <div id="seatAdmin"></div>
+      </div>
+      <div class="panel">
+        <h2>Scoring Fixes</h2>
+        <p class="muted small">Fix golfers that don't match ESPN's leaderboard: map to the ESPN name, or set a manual total-score override.</p>
+        <div class="table-wrap"><table id="fixTable"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="muted small">Live scores from ESPN &middot; polls every 3 min during the tournament &middot; missed cut = 80 for R3 &amp; R4</footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
