@@ -562,12 +562,14 @@ function renderAdmin() {
       `<label>Pick ${i + 1}<select>${owners().map(n => `<option${n === o ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>`
     ).join("");
   }
-  const tn = $("teamNames");
-  if (document.activeElement !== tn && !tn.value) tn.value = owners().join("\n");
-  const ri = $("roundsInput");
-  if (document.activeElement !== ri && !ri.value) ri.value = numRounds();
-  const ti = $("topCountInput");
-  if (document.activeElement !== ti && !ti.value) ti.value = numTop();
+  // prefill an input, and keep it in sync with the DB value until the user edits it
+  const prefill = (el, val) => {
+    if (document.activeElement === el) return;
+    if (!el.value || el.value === el.dataset.prefill) { el.value = val; el.dataset.prefill = String(val); }
+  };
+  prefill($("teamNames"), owners().join("\n"));
+  prefill($("roundsInput"), numRounds());
+  prefill($("topCountInput"), numTop());
 
   const inDraft = phase() === "draft" || draftDone();
   $("teamNames").disabled = inDraft;
