@@ -85,11 +85,22 @@ firebase.auth().onAuthStateChanged(u => {
 });
 if (!firebase.auth().currentUser) { me.identity = deviceId(); }
 
-db.ref(".info/connected").on("value", s => {
+let connected = null;
+db.ref(".info/connected").on("value", s => { connected = !!s.val(); renderConn(); });
+// "● live" only while the draft is running; a reconnect warning shows in any phase
+function renderConn() {
   const el = $("connStatus");
-  el.textContent = s.val() ? "● live" : "reconnecting…";
-  el.classList.toggle("on", !!s.val());
-});
+  if (connected === false && S.loaded) {
+    el.textContent = "reconnecting…";
+    el.classList.remove("on", "hidden");
+  } else if (connected && phase() === "draft" && !draftDone()) {
+    el.textContent = "● live";
+    el.classList.add("on");
+    el.classList.remove("hidden");
+  } else {
+    el.classList.add("hidden");
+  }
+}
 
 for (const node of ["state", "config", "seats", "golfers", "picks", "pickedGolfers", "overrides"]) {
   db.ref(node).on("value", snap => {
@@ -358,6 +369,7 @@ function computeStandings() {
 
 /* ================= RENDER ================= */
 function render() {
+  renderConn();
   renderBanner();
   renderSeatBar();
   renderDraft();
@@ -368,11 +380,11 @@ function render() {
 function renderBanner() {
   const b = $("banner");
   b.classList.remove("hidden", "me", "done");
-  let title = "Open Pool 2026";
+  let title = "The Open Championship 2026 - Snake Draft Pool";
   if (!S.loaded) { b.classList.add("hidden"); }
   else if (!S.state) { b.textContent = "Not initialized — admin: unlock the Admin tab and press Full reset."; }
   else if (phase() === "setup") { b.textContent = "🏌️ Draft has not started yet"; }
-  else if (draftDone()) { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); title = "🏆 Open Pool 2026"; }
+  else if (draftDone()) { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); title = "🏆 The Open Championship 2026 - Snake Draft Pool"; }
   else {
     const o = onClockOwner();
     const i = currentPick();
