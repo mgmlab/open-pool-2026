@@ -632,8 +632,9 @@ function renderAdmin() {
   // seats
   $("seatAdmin").innerHTML = owners().map(o => {
     const v = (S.seats || {})[o];
-    const ad = autodraftOn(o) ? ' <span title="autodraft on">🤖</span>' : "";
-    return `<div>${esc(o)}:${ad} ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'} <button data-autodraft="${esc(o)}">autodraft ${autodraftOn(o) ? "off" : "on"}</button></div>`;
+    const on = autodraftOn(o);
+    const state = on ? ' <span class="counted">🤖 autodraft is ON</span>' : "";
+    return `<div>${esc(o)}:${state} ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'} <button data-autodraft="${esc(o)}">turn autodraft ${on ? "OFF" : "ON"}</button></div>`;
   }).join("");
 
   // scoring fixes table (skip rebuild while editing)
@@ -689,7 +690,10 @@ $("seatAdmin").addEventListener("click", e => {
   const o = e.target.dataset?.clearseat;
   if (o && confirm(`Clear ${o}'s seat claim?`)) db.ref("seats/" + o).remove();
   const a = e.target.dataset?.autodraft;
-  if (a) { autodraftArmedFor = -1; db.ref("autodraft/" + a).set(autodraftOn(a) ? null : true); }
+  if (a && confirm(`Turn autodraft ${autodraftOn(a) ? "OFF" : "ON"} for ${a}?${autodraftOn(a) ? "" : " Their picks will be made automatically (best available odds)."}`)) {
+    autodraftArmedFor = -1;
+    db.ref("autodraft/" + a).set(autodraftOn(a) ? null : true);
+  }
 });
 $("fixTable").addEventListener("click", e => {
   const gid = e.target.dataset?.savefix;
