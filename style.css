@@ -134,3 +134,29 @@ td.manual { color: #6ab0ff; }
 #seatAdmin button { padding: 2px 8px; font-size: 0.75rem; margin-left: 8px; }
 #fixTable input { width: 160px; margin: 0; padding: 4px 6px; font-size: 0.85rem; }
 footer { margin-top: 24px; text-align: center; }
+
+/* ---------- mobile ---------- */
+@media (max-width: 768px) {
+  body { padding: 0 8px 24px; }
+  h1 { font-size: 1.05rem; }
+  .banner {
+    font-size: 1.05rem; padding: 10px 12px; margin: 8px 0;
+    position: sticky; top: 4px; z-index: 50;
+  }
+  nav#tabs { position: sticky; top: 0; background: var(--bg); z-index: 40; margin-top: 0; }
+  .tab { flex: 1; padding: 10px 4px; font-size: 0.95rem; text-align: center; }
+  .panel { padding: 10px; margin-bottom: 12px; }
+  .draft-layout, .standings-layout { flex-direction: column; align-items: stretch; }
+  .draft-layout > .panel, .standings-layout > .panel { width: 100%; min-width: 0; }
+  #pickPanel { width: 100%; }
+  .golfer-list { max-height: 38vh; }
+  table { font-size: 0.8rem; }
+  th, td { padding: 4px 6px; }
+  #board { font-size: 0.72rem; }
+  #board td { min-width: 78px; padding: 4px 5px; }
+  #bestTable td, #avgTable td, .roster-card td { white-space: normal; }
+  .roster-grid { grid-template-columns: 1fr; }
+  .standings-meta { flex-wrap: wrap; gap: 8px; }
+  .pick-log { max-height: 140px; }
+  #fixTable input { width: 100px; }
+}
