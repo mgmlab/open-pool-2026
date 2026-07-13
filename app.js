@@ -380,17 +380,17 @@ function render() {
 function renderBanner() {
   const b = $("banner");
   b.classList.remove("hidden", "me", "done");
-  let title = "The Open Championship 2026 - Snake Draft Pool";
+  let title = "The Open - 2026 Snake Draft";
   if (!S.loaded) { b.classList.add("hidden"); }
   else if (!S.state) { b.textContent = "Not initialized — admin: unlock the Admin tab and press Full reset."; }
   else if (phase() === "setup") { b.textContent = "🏌️ Draft has not started yet"; }
-  else if (draftDone()) { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); title = "🏆 The Open Championship 2026 - Snake Draft Pool"; }
+  else if (draftDone()) { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); title = "🏆 The Open - 2026 Snake Draft"; }
   else {
     const o = onClockOwner();
     const i = currentPick();
     b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
     if (o === me.owner) { b.classList.add("me"); b.textContent += "  — THAT'S YOU!"; }
-    title = `⏰ ${o} is up — Open Pool`;
+    title = `⏰ ${o} is up — The Open - 2026 Snake Draft`;
   }
   document.title = title;
 }
