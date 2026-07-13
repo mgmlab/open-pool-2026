@@ -13,11 +13,14 @@ scores come from ESPN's public golf leaderboard API.
 - **Draft**: rounds × teams picks (default 7×7 = 49), snake order. The admin sets the
   round-1 order before starting. The big banner and the browser tab title always show who
   is on the clock.
-- **Scoring**: after the draft completes, the page polls ESPN every 3 minutes.
-  A golfer's total = sum of round strokes; a golfer who misses the cut (or WDs/DQs)
-  scores **80** for each unplayed round (rounds 3–4 per the pool rule).
-  - *Best Golfer* table: teams ranked by their single best golfer's total.
-  - *Team Average* table: teams ranked by the average total across all 7 golfers.
+- **Scoring**: after the draft completes, the page polls ESPN every 3 minutes. A golfer's
+  score is their overall **to-par** number and updates live mid-round (a golfer 5-under
+  thru 11 counts as −5 right now). A golfer who misses the cut (or WDs/DQs) scores **80
+  strokes** for each unplayed round, i.e. +(80 − par) per round to par. Golfers who
+  haven't hit a shot yet are "pending" and don't count as even par.
+  - *Top X Combined* table: teams ranked by the summed to-par of their best X golfers
+    (X is set in the admin panel and can be changed even mid-tournament).
+  - *Best Golfer* table: teams ranked by their single best golfer.
   - The full official tournament leaderboard renders below the league standings.
 - Roster golfers that fail to match ESPN's leaderboard by normalized name are flagged;
   fix them in **Admin → Scoring Fixes** with an exact ESPN name mapping or a manual

@@ -30,7 +30,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, loaded: false };
-const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null };
+const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null, par: 70 /* Royal Birkdale; real value read from feed */ };
 const me = { identity: null, owner: null, admin: false };
 
 /* ================= HELPERS ================= */
@@ -55,6 +55,14 @@ function ownerForPick(i, order) {
   return order[r % 2 === 0 ? p : T - 1 - p];
 }
 const fmtOdds = (o) => (o == null ? "" : (o > 0 ? "+" + o : String(o)));
+const fmtToPar = (n) => (n == null ? "—" : n === 0 ? "E" : n > 0 ? "+" + n : String(n));
+function parseToPar(s) {
+  if (s == null) return null;
+  s = String(s).trim();
+  if (/^e$/i.test(s)) return 0;
+  const n = parseInt(s.replace("+", ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
 
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -303,6 +311,7 @@ async function fetchScores(manual) {
     const comp = ev && ev.competitions && ev.competitions[0];
     espn.eventName = ev ? ev.name : null;
     espn.eventStatus = ev?.status?.type?.name || null;
+    espn.par = Number(ev?.courses?.[0]?.shotsToPar) || espn.par;
     espn.competitors = (comp?.competitors || []).map(c => {
       const rounds = {};
       for (const ls of c.linescores || []) {
@@ -316,10 +325,13 @@ async function fetchScores(manual) {
         rounds,
         totalStrokes: Number(c.score?.value),
         toPar: c.score?.displayValue ?? "",
+        liveToPar: parseToPar(c.score?.displayValue), // overall to par, live mid-round; null before first tee shot
         statusName,
+        state: c.status?.type?.state || "",
+        thru: Number(c.status?.thru) || 0,
         out: /CUT|WITHDRAW|DISQUAL/i.test(statusName),
         pos: c.status?.position?.displayName || "",
-        detail: c.status?.displayValue || "",
+        detail: (/^\d{4}-\d{2}-\d{2}T/.test(c.status?.displayValue || "") ? c.status?.detail : c.status?.displayValue) || c.status?.detail || "",
         sortOrder: Number(c.sortOrder) || 999
       };
     });
@@ -342,25 +354,30 @@ function maybeStartPolling() {
   }
 }
 
-/* Returns {matched, total, played, out, manual, espnName, toPar, pos, detail} for a rostered golfer */
+/* A golfer's total is expressed TO PAR (lower = better) and updates live mid-round:
+   - active/finished golfers: ESPN's overall to-par, which includes holes of the round in progress
+   - cut/WD/DQ golfers: completed rounds to par, plus (80 - par) for each unplayed round (pool rule: 80)
+   - manual overrides are entered as to-par numbers (e.g. 19 for +19, -3)
+   - golfers who haven't hit a shot yet are "pending" (total null) so they don't count as even par
+   Returns {matched, manual, pending, total, out, pos, detail, thru, state, espnName} */
 function golferScore(gid) {
   const g = S.golfers[gid];
   const ov = (S.overrides || {})[gid] || {};
-  if (ov.score != null && ov.score !== "") return { matched: true, manual: true, total: Number(ov.score), played: 4, out: false, toPar: "", pos: "", detail: "manual", espnName: "" };
+  if (ov.score != null && ov.score !== "") return { matched: true, manual: true, total: Number(ov.score), out: false, pos: "", detail: "manual", espnName: "", state: "post", thru: 0 };
   if (!g) return { matched: false };
   const target = ov.espnName ? normName(ov.espnName) : normName(g.name);
   const c = espn.byNorm[target];
   if (!c) return { matched: false };
-  let total = 0, played = 0, penalized = false;
-  for (let r = 1; r <= 4; r++) {
-    if (Number.isFinite(c.rounds[r])) { total += c.rounds[r]; played++; }
-    else if (c.out) { total += CUT_SCORE; penalized = true; }
+  const base = { matched: true, manual: false, out: c.out, pos: c.pos, detail: c.detail, espnName: c.name, state: c.state, thru: c.thru };
+  if (c.out) {
+    let total = 0;
+    for (let r = 1; r <= 4; r++) {
+      total += Number.isFinite(c.rounds[r]) ? c.rounds[r] - espn.par : CUT_SCORE - espn.par;
+    }
+    return { ...base, total, penalized: true };
   }
-  // no completed rounds yet (and not cut/WD): don't count a 0 toward standings
-  if (played === 0 && !c.out) {
-    return { matched: true, manual: false, pending: true, total: null, played: 0, out: false, toPar: c.toPar, pos: c.pos, detail: c.detail, espnName: c.name };
-  }
-  return { matched: true, manual: false, total, played, out: c.out, penalized, toPar: c.toPar, pos: c.pos, detail: c.detail, espnName: c.name };
+  if (c.liveToPar == null) return { ...base, pending: true, total: null };
+  return { ...base, total: c.liveToPar };
 }
 
 function computeStandings() {
@@ -485,23 +502,22 @@ function renderStandings() {
     warn.innerHTML = "⚠ Unmatched golfers (fix in Admin → Scoring Fixes): " + unmatched.map(u => `<b>${esc(u.name)}</b> (${esc(u.owner)})`).join(", ");
   } else warn.classList.add("hidden");
 
-  const fmt = (t) => (t == null ? "—" : String(Math.round(t * 100) / 100));
   const X = numTop();
 
   $("topTitle").textContent = `📊 Top ${X} Combined`;
-  $("topDesc").textContent = `Teams ranked by the combined total of their best ${X} golfers — lower is better`;
+  $("topDesc").textContent = `Teams ranked by the combined to-par score of their best ${X} golfers — live during rounds, lower is better`;
   const topRows = teams.slice().sort((a, b) => (a.topSum ?? 1e9) - (b.topSum ?? 1e9));
-  $("topTable").innerHTML = `<tr><th>#</th><th>Team</th><th class=num>Top ${X} Total</th><th class=num>Counting</th></tr>` +
+  $("topTable").innerHTML = `<tr><th>#</th><th>Team</th><th class=num>Top ${X} To Par</th><th class=num>Counting</th></tr>` +
     topRows.map((t, i) =>
-      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td class="num">${fmt(t.topSum)}</td>` +
+      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td class="num">${fmtToPar(t.topSum)}</td>` +
       `<td class="num">${t.counted}/${X}${t.rows.length >= X && t.counted < X ? " ⚠" : ""}</td></tr>`
     ).join("");
 
   const bestRows = teams.slice().sort((a, b) => (a.best ? a.best.sc.total : 1e9) - (b.best ? b.best.sc.total : 1e9));
-  $("bestTable").innerHTML = "<tr><th>#</th><th>Team</th><th>Best Golfer</th><th class=num>Total</th><th class=num>To Par</th></tr>" +
+  $("bestTable").innerHTML = "<tr><th>#</th><th>Team</th><th>Best Golfer</th><th class=num>To Par</th><th>Pos</th></tr>" +
     bestRows.map((t, i) =>
       `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td>${t.best ? esc(t.best.pick.name) : "—"}</td>` +
-      `<td class="num">${t.best ? fmt(t.best.sc.total) : "—"}</td><td class="num">${t.best ? esc(t.best.sc.toPar) : ""}</td></tr>`
+      `<td class="num">${t.best ? fmtToPar(t.best.sc.total) : "—"}</td><td>${t.best ? esc(t.best.sc.pos || "") : ""}</td></tr>`
     ).join("");
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
@@ -510,11 +526,15 @@ function renderStandings() {
       const sc = r.sc;
       const cls = sc.manual ? "manual" : (sc.out ? "cut" : "");
       const isCounted = t.countedGids.has(r.pick.gid);
-      const total = sc.matched && sc.total != null ? Math.round(sc.total * 100) / 100 : "—";
-      const note = sc.manual ? "manual" : (sc.pending ? esc(sc.detail || "not started") : (sc.matched ? (sc.out ? esc(sc.detail || "CUT") : `${esc(sc.toPar)}${sc.pos ? " · " + esc(sc.pos) : ""}`) : "no match"));
+      const total = sc.matched ? fmtToPar(sc.total) : "—";
+      const note = sc.manual ? "manual"
+        : !sc.matched ? "no match"
+        : sc.pending ? esc(sc.detail || "not started")
+        : sc.out ? esc(sc.detail || "CUT")
+        : `${esc(sc.pos || "")}${sc.state === "in" && sc.thru ? " · thru " + sc.thru : ""}`;
       return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${esc(r.pick.name)}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
     }).join("");
-    return `<div class="roster-card"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>Total</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
+    return `<div class="roster-card"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
   }).join("");
 
   // official leaderboard
@@ -580,7 +600,7 @@ function renderAdmin() {
         const match = sc.manual ? "manual" : (sc.matched ? "✓ " + esc(sc.espnName || "") : (espn.competitors.length ? "✗ NO MATCH" : "?"));
         return `<tr><td>${esc(p.name)}</td><td>${esc(p.owner)}</td><td>${match}</td>` +
           `<td><input type="text" data-espnname="${esc(p.gid)}" value="${esc(ov.espnName || "")}" placeholder="exact ESPN name"></td>` +
-          `<td><input type="number" data-score="${esc(p.gid)}" value="${esc(ov.score ?? "")}" placeholder="total"></td>` +
+          `<td><input type="number" data-score="${esc(p.gid)}" value="${esc(ov.score ?? "")}" placeholder="to par, e.g. -3 or 19"></td>` +
           `<td><button data-savefix="${esc(p.gid)}">Save</button></td></tr>`;
       }).join("") || `<tr><td class="muted" colspan="6">No picks yet.</td></tr>`);
   }
