@@ -11,8 +11,8 @@ const firebaseConfig = {
   appId: "1:338076424606:web:41e55424157d0b5adc5e8f"
 };
 
-const OWNERS = ["Ram", "Dragon", "Gary", "GF", "Ronnie", "Phillips", "Ace"];
-const TEAMS = 7, ROUNDS = 7, TOTAL_PICKS = TEAMS * ROUNDS;
+const DEFAULT_OWNERS = ["Ram", "Dragon", "Gary", "GF", "Ronnie", "Phillips", "Ace"];
+const DEFAULT_ROUNDS = 7;
 const CUT_SCORE = 80; // per round, applied to R3/R4 (and any unplayed round) for CUT/WD/DQ golfers
 
 // ESPN public leaderboard for The Open 2026 (event 401811957, Jul 16-19).
@@ -29,7 +29,7 @@ const ADMIN_HASH = "476bd2cff73bedea2bab7696c3e24f09a7fd075c163a4f42a80ee978d56b
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const S = { state: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, loaded: false };
+const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, loaded: false };
 const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null };
 const me = { identity: null, owner: null, admin: false };
 
@@ -46,12 +46,13 @@ function normName(s) {
     .replace(/\s+/g, " ").trim();
 }
 const golferId = (name) => "g_" + normName(name).replace(/ /g, "_");
-const pickKey = (i) => "p" + String(i).padStart(2, "0");
+const pickKey = (i) => "p" + String(i).padStart(3, "0");
 
 function ownerForPick(i, order) {
-  if (!order || order.length !== TEAMS) return null;
-  const r = Math.floor(i / TEAMS), p = i % TEAMS;
-  return order[r % 2 === 0 ? p : TEAMS - 1 - p];
+  if (!order || order.length < 2) return null;
+  const T = order.length;
+  const r = Math.floor(i / T), p = i % T;
+  return order[r % 2 === 0 ? p : T - 1 - p];
 }
 const fmtOdds = (o) => (o == null ? "" : (o > 0 ? "+" + o : String(o)));
 
@@ -90,7 +91,7 @@ db.ref(".info/connected").on("value", s => {
   el.classList.toggle("on", !!s.val());
 });
 
-for (const node of ["state", "seats", "golfers", "picks", "pickedGolfers", "overrides"]) {
+for (const node of ["state", "config", "seats", "golfers", "picks", "pickedGolfers", "overrides"]) {
   db.ref(node).on("value", snap => {
     S[node] = snap.val() || (node === "state" ? null : {});
     S.loaded = true;
@@ -102,7 +103,7 @@ for (const node of ["state", "seats", "golfers", "picks", "pickedGolfers", "over
 
 function resolveMySeat() {
   me.owner = null;
-  for (const o of OWNERS) if (S.seats && S.seats[o] === me.identity) me.owner = o;
+  for (const o of owners()) if (S.seats && S.seats[o] === me.identity) me.owner = o;
   // hint from a previous visit (identity may have changed if browser storage was cleared)
   if (!me.owner) {
     const hint = localStorage.getItem("op26_owner");
@@ -113,9 +114,13 @@ function resolveMySeat() {
 /* ================= DERIVED ================= */
 const phase = () => (S.state ? S.state.phase : null);
 const currentPick = () => (S.state ? S.state.currentPick || 0 : 0);
-const draftOrder = () => (S.state && Array.isArray(S.state.draftOrder) && S.state.draftOrder.length === TEAMS ? S.state.draftOrder : null);
-const onClockOwner = () => (phase() === "draft" && currentPick() < TOTAL_PICKS ? ownerForPick(currentPick(), draftOrder()) : null);
-const draftDone = () => phase() === "complete" || currentPick() >= TOTAL_PICKS;
+const owners = () => (S.config && S.config.owners ? Object.keys(S.config.owners) : DEFAULT_OWNERS.slice()).sort((a, b) => a.localeCompare(b));
+const numTeams = () => owners().length;
+const numRounds = () => (S.config && S.config.rounds ? S.config.rounds : DEFAULT_ROUNDS);
+const totalPicks = () => numTeams() * numRounds();
+const draftOrder = () => (S.state && Array.isArray(S.state.draftOrder) && S.state.draftOrder.length === numTeams() ? S.state.draftOrder : null);
+const onClockOwner = () => (phase() === "draft" && currentPick() < totalPicks() ? ownerForPick(currentPick(), draftOrder()) : null);
+const draftDone = () => phase() === "complete" || currentPick() >= totalPicks();
 
 function teamRoster(owner) {
   return Object.values(S.picks || {}).filter(p => p.owner === owner).sort((a, b) => a.idx - b.idx);
@@ -143,13 +148,13 @@ async function makePick(gid) {
   updates["picks/" + pickKey(i)] = { idx: i, owner, gid, name: g.name, odds: g.odds ?? null, ts: firebase.database.ServerValue.TIMESTAMP };
   updates["pickedGolfers/" + gid] = i;
   updates["state/currentPick"] = i + 1;
-  if (i + 1 === TOTAL_PICKS) updates["state/phase"] = "complete";
+  if (i + 1 === totalPicks()) updates["state/phase"] = "complete";
   try {
     await db.ref().update(updates);
     notifyPickMade({
-      idx: i, round: Math.floor(i / TEAMS) + 1, pickInRound: (i % TEAMS) + 1,
+      idx: i, round: Math.floor(i / numTeams()) + 1, pickInRound: (i % numTeams()) + 1,
       owner, golfer: g.name, odds: g.odds ?? null,
-      nextOwner: i + 1 < TOTAL_PICKS ? ownerForPick(i + 1, draftOrder()) : null
+      nextOwner: i + 1 < totalPicks() ? ownerForPick(i + 1, draftOrder()) : null
     });
   } catch (e) { alert("Pick failed: " + e.message); }
 }
@@ -170,14 +175,33 @@ async function adminUnlock() {
 
 function buildSchedule(order) {
   const sched = {};
-  for (let i = 0; i < TOTAL_PICKS; i++) sched[pickKey(i)] = { idx: i, owner: ownerForPick(i, order) };
+  for (let i = 0; i < totalPicks(); i++) sched[pickKey(i)] = { idx: i, owner: ownerForPick(i, order) };
   return sched;
+}
+
+async function saveConfig() {
+  if (phase() !== "setup") { alert("League setup can only be changed before the draft starts."); return; }
+  const names = [...new Set($("teamNames").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))];
+  if (names.length < 2 || names.length > 20) { alert("Enter 2–20 team names, one per line."); return; }
+  if (names.some(n => /[.#$/\[\]]/.test(n))) { alert("Team names cannot contain . # $ / [ ]"); return; }
+  const rounds = parseInt($("roundsInput").value, 10);
+  if (!Number.isFinite(rounds) || rounds < 1 || rounds > 30) { alert("Rounds must be 1–30."); return; }
+  if (!confirm(`Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks?`)) return;
+  const ownersMap = {};
+  for (const n of names) ownersMap[n] = true;
+  const updates = { config: { teams: names.length, rounds, owners: ownersMap } };
+  const cur = S.state && Array.isArray(S.state.draftOrder) ? S.state.draftOrder : [];
+  const sameSet = cur.length === names.length && cur.every(o => ownersMap[o]) && new Set(cur).size === cur.length;
+  updates["state/draftOrder"] = sameSet ? cur : names.slice().sort((a, b) => a.localeCompare(b));
+  for (const o of Object.keys(S.seats || {})) if (!ownersMap[o]) updates["seats/" + o] = null;
+  await db.ref().update(updates);
+  alert("League setup saved.");
 }
 
 async function saveOrder() {
   const sels = [...document.querySelectorAll("#orderSelects select")];
   const order = sels.map(s => s.value);
-  if (new Set(order).size !== TEAMS) { alert("Each team must appear exactly once."); return; }
+  if (new Set(order).size !== numTeams() || !order.every(o => owners().includes(o))) { alert("Each team must appear exactly once."); return; }
   await db.ref("state/draftOrder").set(order);
   alert("Draft order saved.");
 }
@@ -187,9 +211,10 @@ function parseFieldText(text) {
   for (let line of text.split(/\r?\n/)) {
     line = line.trim();
     if (!line) continue;
-    const m = line.match(/^(.+?),\s*\+?(-?\d+)\s*$/);
-    const name = m ? m[1].trim() : line.replace(/,\s*$/, "").trim();
-    const odds = m ? parseInt(m[2], 10) : null;
+    // accepts "Name, +450", "Name +450", "Name, 450", "Name +10,000", or just "Name"
+    const m = line.match(/^(.+?)[,\s]+\+?(-?\d[\d,]*)\s*$/);
+    const name = (m ? m[1] : line).replace(/,\s*$/, "").trim();
+    const odds = m ? parseInt(m[2].replace(/,/g, ""), 10) : null;
     if (!name) continue;
     const gid = golferId(name);
     if (golfers[gid]) dupes.push(name); else golfers[gid] = { name, odds };
@@ -235,7 +260,7 @@ async function undoPick() {
 async function resetDraft() {
   if (!confirm("Reset the draft? All picks are erased (field & seats kept).")) return;
   if (!confirm("Are you sure? This cannot be undone.")) return;
-  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || OWNERS } });
+  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || owners() } });
 }
 
 async function fullReset() {
@@ -243,7 +268,7 @@ async function fullReset() {
   if (!confirm("Really erase everything?")) return;
   await db.ref().update({
     picks: null, pickedGolfers: null, schedule: null, golfers: null, seats: null, overrides: null,
-    state: { phase: "setup", currentPick: 0, draftOrder: OWNERS }
+    state: { phase: "setup", currentPick: 0, draftOrder: owners() }
   });
 }
 
@@ -316,7 +341,7 @@ function golferScore(gid) {
 function computeStandings() {
   const teams = [];
   const unmatched = [];
-  for (const owner of OWNERS) {
+  for (const owner of owners()) {
     const roster = teamRoster(owner);
     const rows = roster.map(p => {
       const sc = golferScore(p.gid);
@@ -351,7 +376,7 @@ function renderBanner() {
   else {
     const o = onClockOwner();
     const i = currentPick();
-    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / TEAMS) + 1}, Pick ${i % TEAMS + 1} (#${i + 1} overall)`;
+    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
     if (o === me.owner) { b.classList.add("me"); b.textContent += "  — THAT'S YOU!"; }
     title = `⏰ ${o} is up — Open Pool`;
   }
@@ -365,7 +390,7 @@ function renderSeatBar() {
     sel.classList.add("hidden"); btn.classList.add("hidden");
     return;
   }
-  const open = OWNERS.filter(o => !(S.seats || {})[o]);
+  const open = owners().filter(o => !(S.seats || {})[o]);
   if (!open.length) { info.textContent = "All seats claimed — you are spectating."; sel.classList.add("hidden"); btn.classList.add("hidden"); return; }
   info.textContent = "Claim your seat:";
   const prev = sel.value;
@@ -395,13 +420,14 @@ function renderDraft() {
   ).join("") || `<p class="muted">No golfers${Object.keys(S.golfers || {}).length ? " match" : " loaded — admin pastes the field before the draft"}.</p>`;
 
   // board
-  const order = draftOrder() || OWNERS;
+  const order = draftOrder() || owners();
+  const T = order.length;
   const cur = currentPick();
   let html = "<tr><th>Rd</th>" + order.map(o => `<th${o === me.owner ? ' class="mycol"' : ""}>${esc(o)}${o === me.owner ? " ⭐" : ""}</th>`).join("") + "</tr>";
-  for (let r = 0; r < ROUNDS; r++) {
+  for (let r = 0; r < numRounds(); r++) {
     html += `<tr><th>${r + 1}</th>`;
-    for (let c = 0; c < TEAMS; c++) {
-      const idx = r * TEAMS + (r % 2 === 0 ? c : TEAMS - 1 - c);
+    for (let c = 0; c < T; c++) {
+      const idx = r * T + (r % 2 === 0 ? c : T - 1 - c);
       const p = S.picks[pickKey(idx)];
       const onclock = phase() === "draft" && idx === cur;
       html += `<td class="${p ? "filled" : ""}${onclock ? " onclock" : ""}">` +
@@ -414,7 +440,7 @@ function renderDraft() {
   // pick log
   const picks = Object.values(S.picks || {}).sort((a, b) => b.idx - a.idx);
   $("pickLog").innerHTML = picks.map(p =>
-    `<div>#${p.idx + 1} (R${Math.floor(p.idx / TEAMS) + 1}.${p.idx % TEAMS + 1}) <b>${esc(p.owner)}</b> — ${esc(p.name)} ${esc(fmtOdds(p.odds))}</div>`
+    `<div>#${p.idx + 1} (R${Math.floor(p.idx / numTeams()) + 1}.${p.idx % numTeams() + 1}) <b>${esc(p.owner)}</b> — ${esc(p.name)} ${esc(fmtOdds(p.odds))}</div>`
   ).join("") || `<div>No picks yet.</div>`;
 }
 
@@ -480,12 +506,18 @@ function renderAdmin() {
   // draft order selects (skip rebuild while user is choosing)
   const wrap = $("orderSelects");
   if (!wrap.contains(document.activeElement)) {
-    const order = draftOrder() || OWNERS;
+    const order = draftOrder() || owners();
     wrap.innerHTML = order.map((o, i) =>
-      `<label>Pick ${i + 1}<select>${OWNERS.map(n => `<option${n === o ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>`
+      `<label>Pick ${i + 1}<select>${owners().map(n => `<option${n === o ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>`
     ).join("");
   }
+  const tn = $("teamNames");
+  if (document.activeElement !== tn && !tn.value) tn.value = owners().join("\n");
+  const ri = $("roundsInput");
+  if (document.activeElement !== ri && !ri.value) ri.value = numRounds();
+
   const inDraft = phase() === "draft" || draftDone();
+  $("saveConfig").disabled = inDraft;
   $("saveOrder").disabled = inDraft;
   $("saveField").disabled = inDraft;
   $("startDraft").disabled = phase() !== "setup";
@@ -498,7 +530,7 @@ function renderAdmin() {
   $("fieldInfo").textContent = `${Object.keys(S.golfers || {}).length} golfers in field.`;
 
   // seats
-  $("seatAdmin").innerHTML = OWNERS.map(o => {
+  $("seatAdmin").innerHTML = owners().map(o => {
     const v = (S.seats || {})[o];
     return `<div>${esc(o)}: ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'}</div>`;
   }).join("");
@@ -534,6 +566,7 @@ $("refreshScores").addEventListener("click", () => fetchScores(true));
 
 $("adminUnlock").addEventListener("click", adminUnlock);
 $("adminPass").addEventListener("keydown", e => { if (e.key === "Enter") adminUnlock(); });
+$("saveConfig").addEventListener("click", saveConfig);
 $("saveOrder").addEventListener("click", saveOrder);
 $("saveField").addEventListener("click", saveField);
 $("startDraft").addEventListener("click", startDraft);

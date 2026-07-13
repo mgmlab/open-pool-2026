@@ -8,15 +8,19 @@
         }
       }
     },
+    "config": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()"
+    },
     "state": {
       ".read": true,
       ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
       "phase": {
-        ".write": "auth != null && newData.val() === 'complete' && root.child('state/currentPick').val() === 48",
+        ".write": "auth != null && newData.val() === 'complete' && root.child('state/currentPick').val() === root.child('config/teams').val() * root.child('config/rounds').val() - 1",
         ".validate": "newData.val() === 'setup' || newData.val() === 'draft' || newData.val() === 'complete'"
       },
       "currentPick": {
-        ".write": "auth != null && root.child('state/phase').val() === 'draft' && data.isNumber() && newData.val() === data.val() + 1 && newData.val() <= 49",
+        ".write": "auth != null && root.child('state/phase').val() === 'draft' && data.isNumber() && newData.val() === data.val() + 1 && newData.val() <= root.child('config/teams').val() * root.child('config/rounds').val()",
         ".validate": "newData.isNumber()"
       }
     },
@@ -25,7 +29,7 @@
       ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
       "$owner": {
         ".write": "auth != null && !data.exists() && newData.val() === auth.uid",
-        ".validate": "$owner === 'Ram' || $owner === 'Dragon' || $owner === 'Gary' || $owner === 'GF' || $owner === 'Ronnie' || $owner === 'Phillips' || $owner === 'Ace'"
+        ".validate": "root.child('config/owners').child($owner).exists()"
       }
     },
     "golfers": {

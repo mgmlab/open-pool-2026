@@ -86,11 +86,15 @@
     <div id="adminPanel" class="hidden">
       <div class="panel">
         <h2>Draft Setup</h2>
-        <h3>Draft order (round 1; snakes each round)</h3>
+        <h3>League setup</h3>
+        <p class="muted small">Team names, one per line. Changing teams resets the draft order and clears seats of removed teams.</p>
+        <textarea id="teamNames" rows="7" placeholder="One team name per line"></textarea>
+        <label class="muted small">Rounds per team: <input type="number" id="roundsInput" min="1" max="30" style="width:80px"></label>
+        <br><button id="saveConfig">Save league setup</button>
         <div id="orderSelects" class="order-row"></div>
         <button id="saveOrder">Save order</button>
         <h3>Golfer field</h3>
-        <p class="muted small">One per line: <code>Name, +odds</code> (odds optional, e.g. <code>Scottie Scheffler, +450</code>)</p>
+        <p class="muted small">One per line, odds optional: <code>Scottie Scheffler, +450</code> or <code>Scottie Scheffler +450</code></p>
         <textarea id="fieldInput" rows="10" placeholder="Scottie Scheffler, +450&#10;Rory McIlroy, +700&#10;Jon Rahm"></textarea>
         <button id="saveField">Save field</button>
         <span id="fieldInfo" class="muted"></span>

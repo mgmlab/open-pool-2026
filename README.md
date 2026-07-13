@@ -6,10 +6,13 @@ scores come from ESPN's public golf leaderboard API.
 
 ## How it works
 
-- **Owners**: Ram, Dragon, Gary, GF, Ronnie, Phillips, Ace. Each opens the site and claims
-  their seat from the dropdown (stored in the shared DB; a seat can only be claimed once).
-- **Draft**: 7 rounds × 7 teams = 49 picks, snake order. The admin sets the round-1 order
-  before starting. The big banner and the browser tab title always show who is on the clock.
+- **Owners**: Ram, Dragon, Gary, GF, Ronnie, Phillips, Ace by default — team names, team
+  count, and rounds are editable in the admin panel until the draft starts. Each owner opens
+  the site and claims their seat from the dropdown (stored in the shared DB; a seat can only
+  be claimed once).
+- **Draft**: rounds × teams picks (default 7×7 = 49), snake order. The admin sets the
+  round-1 order before starting. The big banner and the browser tab title always show who
+  is on the clock.
 - **Scoring**: after the draft completes, the page polls ESPN every 3 minutes.
   A golfer's total = sum of round strokes; a golfer who misses the cut (or WDs/DQs)
   scores **80** for each unplayed round (rounds 3–4 per the pool rule).
@@ -24,8 +27,9 @@ scores come from ESPN's public golf leaderboard API.
 
 Open the **Admin** tab and enter the passphrase.
 
-- **Draft Setup**: set the round-1 draft order; paste the tournament field, one golfer per
-  line as `Name, +odds` (odds optional).
+- **Draft Setup**: league setup (team names, one per line, and rounds per team — editable
+  until the draft starts); set the round-1 draft order; paste the tournament field, one
+  golfer per line as `Name, +odds` or `Name +odds` (odds optional; commas in odds OK).
 - **Draft Control**: start draft, undo last pick, reset draft (keeps field & seats),
   full reset (erases everything except the admin passphrase hash).
 - **Scoring Fixes**: per-golfer ESPN name mapping and manual score override.
