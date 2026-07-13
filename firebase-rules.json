@@ -52,6 +52,14 @@
         ".validate": "newData.hasChildren(['idx', 'owner', 'gid', 'name']) && newData.child('idx').val() === root.child('state/currentPick').val()"
       }
     },
+    "autodraft": {
+      ".read": true,
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$owner": {
+        ".write": "auth != null && root.child('seats').child($owner).val() === auth.uid",
+        ".validate": "newData.val() === true"
+      }
+    },
     "pickedGolfers": {
       ".read": true,
       ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",

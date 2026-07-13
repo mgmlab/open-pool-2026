@@ -29,7 +29,7 @@ const ADMIN_HASH = "476bd2cff73bedea2bab7696c3e24f09a7fd075c163a4f42a80ee978d56b
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, loaded: false };
+const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, autodraft: {}, loaded: false };
 const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null, par: 70 /* Royal Birkdale; real value read from feed */ };
 const me = { identity: null, owner: null, admin: false };
 
@@ -110,7 +110,7 @@ function renderConn() {
   }
 }
 
-for (const node of ["state", "config", "seats", "golfers", "picks", "pickedGolfers", "overrides"]) {
+for (const node of ["state", "config", "seats", "golfers", "picks", "pickedGolfers", "overrides", "autodraft"]) {
   db.ref(node).on("value", snap => {
     S[node] = snap.val() || (node === "state" ? null : {});
     S.loaded = true;
@@ -190,18 +190,24 @@ async function makePick(gid, auto = false) {
   }
 }
 
-/* ---- autodraft: picks best available automatically when this seat is on the clock.
-   Local to this device (the seat's own browser makes the pick — keep the page open). */
-const autodraftOn = () => localStorage.getItem("op26_autodraft") === "1";
+/* ---- autodraft: the flag lives in the shared DB (/autodraft/{owner}), so ANY open page
+   that is allowed to submit the on-clock pick executes it — the seat owner's own browser
+   or the admin's. That way a flagged owner's picks still fire while their phone is locked,
+   as long as someone (in practice the admin) has the site open. Duplicate timers are
+   harmless: the rules reject the second write. */
+const autodraftOn = (owner) => !!(S.autodraft || {})[owner];
 let autodraftArmedFor = -1;
 function scheduleAutodraft() {
-  if (!(autodraftOn() && me.owner && phase() === "draft" && !draftDone() && onClockOwner() === me.owner)) return;
+  if (!(phase() === "draft" && !draftDone())) return;
+  const clockOwner = onClockOwner();
+  if (!clockOwner || !autodraftOn(clockOwner)) return;
+  if (!(me.admin || me.owner === clockOwner)) return; // this client may submit that pick
   const i = currentPick();
   if (autodraftArmedFor === i) return;
   autodraftArmedFor = i;
   setTimeout(() => {
-    // re-verify at fire time — state may have moved, or the user may have picked/unchecked
-    if (!(autodraftOn() && phase() === "draft" && onClockOwner() === me.owner && currentPick() === i)) return;
+    // re-verify at fire time — state may have moved, or the flag may have been turned off
+    if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
     const best = Object.entries(S.golfers)
       .filter(([gid]) => S.pickedGolfers[gid] == null)
       .map(([gid, g]) => ({ gid, ...g }))
@@ -446,10 +452,10 @@ function renderAutodraft() {
   const wrap = $("autodraftWrap"), chk = $("autodraftChk"), ab = $("autodraftBanner");
   const eligible = me.owner && phase() === "draft" && !draftDone();
   wrap.classList.toggle("hidden", !eligible);
-  chk.checked = autodraftOn();
-  const show = eligible && autodraftOn();
+  chk.checked = !!(me.owner && autodraftOn(me.owner));
+  const show = eligible && autodraftOn(me.owner);
   ab.classList.toggle("hidden", !show);
-  if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (best available odds). Uncheck "Autodraft my picks" to take back control. Keep this page open.`;
+  if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (best available odds), even if your screen locks. Uncheck "Autodraft my picks" to take back control.`;
 }
 
 function renderBanner() {
@@ -626,7 +632,8 @@ function renderAdmin() {
   // seats
   $("seatAdmin").innerHTML = owners().map(o => {
     const v = (S.seats || {})[o];
-    return `<div>${esc(o)}: ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'}</div>`;
+    const ad = autodraftOn(o) ? ' <span title="autodraft on">🤖</span>' : "";
+    return `<div>${esc(o)}:${ad} ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'} <button data-autodraft="${esc(o)}">autodraft ${autodraftOn(o) ? "off" : "on"}</button></div>`;
   }).join("");
 
   // scoring fixes table (skip rebuild while editing)
@@ -654,13 +661,15 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
 }));
 
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
-$("autodraftChk").addEventListener("change", e => {
-  if (e.target.checked && !confirm("Enable autodraft? When you're on the clock, the best available golfer (by odds) will be drafted for you automatically.")) {
+$("autodraftChk").addEventListener("change", async e => {
+  if (!me.owner) return;
+  if (e.target.checked && !confirm("Enable autodraft? When you're on the clock, the best available golfer (by odds) will be drafted for you automatically — even if you put your phone away.")) {
     e.target.checked = false;
     return;
   }
-  localStorage.setItem("op26_autodraft", e.target.checked ? "1" : "0");
   autodraftArmedFor = -1;
+  try { await db.ref("autodraft/" + me.owner).set(e.target.checked ? true : null); }
+  catch (err) { alert("Could not update autodraft: " + err.message); }
   render();
 });
 $("golferSearch").addEventListener("input", renderDraft);
@@ -679,6 +688,8 @@ $("fullReset").addEventListener("click", fullReset);
 $("seatAdmin").addEventListener("click", e => {
   const o = e.target.dataset?.clearseat;
   if (o && confirm(`Clear ${o}'s seat claim?`)) db.ref("seats/" + o).remove();
+  const a = e.target.dataset?.autodraft;
+  if (a) { autodraftArmedFor = -1; db.ref("autodraft/" + a).set(autodraftOn(a) ? null : true); }
 });
 $("fixTable").addEventListener("click", e => {
   const gid = e.target.dataset?.savefix;
