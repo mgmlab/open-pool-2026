@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <header>
@@ -14,12 +14,14 @@
     <div id="connStatus" class="conn hidden"></div>
   </div>
   <div id="banner" class="banner hidden"></div>
+  <div id="autodraftBanner" class="autodraft-banner hidden"></div>
 </header>
 
 <div id="seatBar" class="seat-bar">
   <span id="seatInfo"></span>
   <select id="seatSelect" class="hidden"></select>
   <button id="claimBtn" class="hidden">Claim seat</button>
+  <label id="autodraftWrap" class="autodraft-label hidden"><input type="checkbox" id="autodraftChk"> Autodraft my picks</label>
 </div>
 
 <nav id="tabs">
@@ -125,6 +127,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

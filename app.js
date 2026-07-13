@@ -156,14 +156,22 @@ async function claimSeat(owner) {
   } catch (e) { alert("Could not claim seat: " + e.message); }
 }
 
-async function makePick(gid) {
+// best-available ordering: lowest odds first, ties alphabetical, no-odds golfers last alphabetical
+function golferCompare(a, b) {
+  if (a.odds != null && b.odds != null) return a.odds - b.odds || a.name.localeCompare(b.name);
+  if (a.odds != null) return -1;
+  if (b.odds != null) return 1;
+  return a.name.localeCompare(b.name);
+}
+
+async function makePick(gid, auto = false) {
   const i = currentPick();
   const owner = onClockOwner();
   const g = S.golfers[gid];
   if (!g || !owner || S.pickedGolfers[gid] != null) return;
   if (!(me.admin || me.owner === owner)) return;
-  if (!me.admin && !confirm(`Draft ${g.name}?`)) return;
-  if (me.admin && me.owner !== owner && !confirm(`ADMIN: draft ${g.name} for ${owner}?`)) return;
+  if (!auto && !me.admin && !confirm(`Draft ${g.name}?`)) return;
+  if (!auto && me.admin && me.owner !== owner && !confirm(`ADMIN: draft ${g.name} for ${owner}?`)) return;
   const updates = {};
   updates["picks/" + pickKey(i)] = { idx: i, owner, gid, name: g.name, odds: g.odds ?? null, ts: firebase.database.ServerValue.TIMESTAMP };
   updates["pickedGolfers/" + gid] = i;
@@ -176,7 +184,30 @@ async function makePick(gid) {
       owner, golfer: g.name, odds: g.odds ?? null,
       nextOwner: i + 1 < totalPicks() ? ownerForPick(i + 1, draftOrder()) : null
     });
-  } catch (e) { alert("Pick failed: " + e.message); }
+  } catch (e) {
+    if (auto) { console.warn("Autodraft pick failed:", e.message); autodraftArmedFor = -1; }
+    else alert("Pick failed: " + e.message);
+  }
+}
+
+/* ---- autodraft: picks best available automatically when this seat is on the clock.
+   Local to this device (the seat's own browser makes the pick — keep the page open). */
+const autodraftOn = () => localStorage.getItem("op26_autodraft") === "1";
+let autodraftArmedFor = -1;
+function scheduleAutodraft() {
+  if (!(autodraftOn() && me.owner && phase() === "draft" && !draftDone() && onClockOwner() === me.owner)) return;
+  const i = currentPick();
+  if (autodraftArmedFor === i) return;
+  autodraftArmedFor = i;
+  setTimeout(() => {
+    // re-verify at fire time — state may have moved, or the user may have picked/unchecked
+    if (!(autodraftOn() && phase() === "draft" && onClockOwner() === me.owner && currentPick() === i)) return;
+    const best = Object.entries(S.golfers)
+      .filter(([gid]) => S.pickedGolfers[gid] == null)
+      .map(([gid, g]) => ({ gid, ...g }))
+      .sort(golferCompare)[0];
+    if (best) makePick(best.gid, true);
+  }, 2500);
 }
 
 /* ---- admin actions ---- */
@@ -403,10 +434,22 @@ function computeStandings() {
 function render() {
   renderConn();
   renderBanner();
+  renderAutodraft();
   renderSeatBar();
   renderDraft();
   renderStandings();
   renderAdmin();
+  scheduleAutodraft();
+}
+
+function renderAutodraft() {
+  const wrap = $("autodraftWrap"), chk = $("autodraftChk"), ab = $("autodraftBanner");
+  const eligible = me.owner && phase() === "draft" && !draftDone();
+  wrap.classList.toggle("hidden", !eligible);
+  chk.checked = autodraftOn();
+  const show = eligible && autodraftOn();
+  ab.classList.toggle("hidden", !show);
+  if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (best available odds). Uncheck "Autodraft my picks" to take back control. Keep this page open.`;
 }
 
 function renderBanner() {
@@ -450,12 +493,7 @@ function renderDraft() {
     .filter(([gid]) => S.pickedGolfers[gid] == null)
     .map(([gid, g]) => ({ gid, ...g }))
     .filter(g => !q || normName(g.name).includes(q))
-    .sort((a, b) => {
-      if (a.odds != null && b.odds != null) return a.odds - b.odds || a.name.localeCompare(b.name);
-      if (a.odds != null) return -1;
-      if (b.odds != null) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    .sort(golferCompare);
   $("availCount").textContent = `(${avail.length})`;
   const canPick = phase() === "draft" && !draftDone() && (me.admin || me.owner === onClockOwner());
   $("golferList").innerHTML = avail.map(g =>
@@ -616,6 +654,15 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
 }));
 
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
+$("autodraftChk").addEventListener("change", e => {
+  if (e.target.checked && !confirm("Enable autodraft? When you're on the clock, the best available golfer (by odds) will be drafted for you automatically.")) {
+    e.target.checked = false;
+    return;
+  }
+  localStorage.setItem("op26_autodraft", e.target.checked ? "1" : "0");
+  autodraftArmedFor = -1;
+  render();
+});
 $("golferSearch").addEventListener("input", renderDraft);
 $("golferList").addEventListener("click", e => { const gid = e.target.dataset?.gid; if (gid) makePick(gid); });
 $("refreshScores").addEventListener("click", () => fetchScores(true));

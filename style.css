@@ -47,7 +47,15 @@ h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--muted); text-transform
 .banner.done { background: linear-gradient(90deg, #1a3a5c, #2e5a8b); border-color: #6ab0ff; box-shadow: none; }
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.012); } }
 
-.seat-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 0.95rem; }
+.seat-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 0.95rem; flex-wrap: wrap; }
+.autodraft-label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.autodraft-label input { width: auto; margin: 0; }
+.autodraft-banner {
+  margin: 10px 0; padding: 14px 18px; border-radius: 10px;
+  background: #7a1f1f; border: 2px solid var(--red); color: #ffd7d7;
+  font-size: 1.15rem; font-weight: 800; text-align: center;
+  box-shadow: 0 0 20px rgba(255, 107, 107, 0.35);
+}
 
 nav#tabs { display: flex; gap: 6px; margin: 8px 0 16px; border-bottom: 1px solid var(--line); }
 .tab {
