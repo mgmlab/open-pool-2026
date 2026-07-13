@@ -55,14 +55,14 @@
     <div id="unmatchedWarn" class="warn hidden"></div>
     <div class="standings-layout">
       <div class="panel grow">
+        <h2 id="topTitle">📊 Top 4 Combined</h2>
+        <p class="muted small" id="topDesc"></p>
+        <div class="table-wrap"><table id="topTable"></table></div>
+      </div>
+      <div class="panel grow">
         <h2>🏆 Best Golfer</h2>
         <p class="muted small">Teams ranked by their single best golfer's total score</p>
         <div class="table-wrap"><table id="bestTable"></table></div>
-      </div>
-      <div class="panel grow">
-        <h2>📊 Team Average</h2>
-        <p class="muted small">Teams ranked by average total across all 7 golfers</p>
-        <div class="table-wrap"><table id="avgTable"></table></div>
       </div>
     </div>
     <div class="panel">
@@ -90,6 +90,7 @@
         <p class="muted small">Team names, one per line. Changing teams resets the draft order and clears seats of removed teams.</p>
         <textarea id="teamNames" rows="7" placeholder="One team name per line"></textarea>
         <label class="muted small">Rounds per team: <input type="number" id="roundsInput" min="1" max="30" style="width:80px"></label>
+        <br><label class="muted small">Top golfers counted toward score: <input type="number" id="topCountInput" min="1" max="30" style="width:80px"></label>
         <br><button id="saveConfig">Save league setup</button>
         <div id="orderSelects" class="order-row"></div>
         <button id="saveOrder">Save order</button>

@@ -111,6 +111,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.rank-1 td { background: rgba(245, 197, 24, 0.12); }
 td.cut { color: var(--red); }
 td.manual { color: #6ab0ff; }
+.counted { color: var(--green); font-weight: 700; }
 
 .pick-log { max-height: 200px; overflow-y: auto; font-size: 0.85rem; color: var(--muted); }
 .pick-log div { padding: 3px 0; border-bottom: 1px dotted var(--line); }

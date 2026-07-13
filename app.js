@@ -128,6 +128,7 @@ const currentPick = () => (S.state ? S.state.currentPick || 0 : 0);
 const owners = () => (S.config && S.config.owners ? Object.keys(S.config.owners) : DEFAULT_OWNERS.slice()).sort((a, b) => a.localeCompare(b));
 const numTeams = () => owners().length;
 const numRounds = () => (S.config && S.config.rounds ? S.config.rounds : DEFAULT_ROUNDS);
+const numTop = () => Math.max(1, Math.min(S.config && S.config.topCount ? S.config.topCount : numRounds(), numRounds()));
 const totalPicks = () => numTeams() * numRounds();
 const draftOrder = () => (S.state && Array.isArray(S.state.draftOrder) && S.state.draftOrder.length === numTeams() ? S.state.draftOrder : null);
 const onClockOwner = () => (phase() === "draft" && currentPick() < totalPicks() ? ownerForPick(currentPick(), draftOrder()) : null);
@@ -191,16 +192,25 @@ function buildSchedule(order) {
 }
 
 async function saveConfig() {
-  if (phase() !== "setup") { alert("League setup can only be changed before the draft starts."); return; }
+  const topCount = parseInt($("topCountInput").value, 10);
+  if (!Number.isFinite(topCount) || topCount < 1) { alert("Top golfers counted must be at least 1."); return; }
+  if (phase() !== "setup") {
+    // draft already running: teams/rounds are locked, but the scoring knob is safe to change
+    if (topCount > numRounds()) { alert(`Top golfers counted can't exceed rounds (${numRounds()}).`); return; }
+    await db.ref("config/topCount").set(topCount);
+    alert(`Draft already started — teams/rounds unchanged, but "top golfers counted" is now ${topCount}.`);
+    return;
+  }
   const names = [...new Set($("teamNames").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))];
   if (names.length < 2 || names.length > 20) { alert("Enter 2–20 team names, one per line."); return; }
   if (names.some(n => /[.#$/\[\]]/.test(n))) { alert("Team names cannot contain . # $ / [ ]"); return; }
   const rounds = parseInt($("roundsInput").value, 10);
   if (!Number.isFinite(rounds) || rounds < 1 || rounds > 30) { alert("Rounds must be 1–30."); return; }
-  if (!confirm(`Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks?`)) return;
+  if (topCount > rounds) { alert(`Top golfers counted (${topCount}) can't exceed rounds per team (${rounds}).`); return; }
+  if (!confirm(`Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks, best ${topCount} scores count?`)) return;
   const ownersMap = {};
   for (const n of names) ownersMap[n] = true;
-  const updates = { config: { teams: names.length, rounds, owners: ownersMap } };
+  const updates = { config: { teams: names.length, rounds, topCount, owners: ownersMap } };
   const cur = S.state && Array.isArray(S.state.draftOrder) ? S.state.draftOrder : [];
   const sameSet = cur.length === names.length && cur.every(o => ownersMap[o]) && new Set(cur).size === cur.length;
   updates["state/draftOrder"] = sameSet ? cur : names.slice().sort((a, b) => a.localeCompare(b));
@@ -346,6 +356,10 @@ function golferScore(gid) {
     if (Number.isFinite(c.rounds[r])) { total += c.rounds[r]; played++; }
     else if (c.out) { total += CUT_SCORE; penalized = true; }
   }
+  // no completed rounds yet (and not cut/WD): don't count a 0 toward standings
+  if (played === 0 && !c.out) {
+    return { matched: true, manual: false, pending: true, total: null, played: 0, out: false, toPar: c.toPar, pos: c.pos, detail: c.detail, espnName: c.name };
+  }
   return { matched: true, manual: false, total, played, out: c.out, penalized, toPar: c.toPar, pos: c.pos, detail: c.detail, espnName: c.name };
 }
 
@@ -359,10 +373,11 @@ function computeStandings() {
       if (!sc.matched && espn.competitors.length) unmatched.push({ owner, name: p.name, gid: p.gid });
       return { pick: p, sc };
     });
-    const scored = rows.filter(r => r.sc.matched);
+    const scored = rows.filter(r => r.sc.matched && r.sc.total != null);
     const best = scored.length ? scored.reduce((a, b) => (a.sc.total <= b.sc.total ? a : b)) : null;
-    const avg = scored.length ? scored.reduce((s, r) => s + r.sc.total, 0) / scored.length : null;
-    teams.push({ owner, rows, best, avg, scoredCount: scored.length });
+    const countedRows = scored.slice().sort((a, b) => a.sc.total - b.sc.total).slice(0, numTop());
+    const topSum = countedRows.length ? countedRows.reduce((s, r) => s + r.sc.total, 0) : null;
+    teams.push({ owner, rows, best, topSum, counted: countedRows.length, countedGids: new Set(countedRows.map(r => r.pick.gid)), scoredCount: scored.length });
   }
   return { teams, unmatched };
 }
@@ -471,6 +486,16 @@ function renderStandings() {
   } else warn.classList.add("hidden");
 
   const fmt = (t) => (t == null ? "—" : String(Math.round(t * 100) / 100));
+  const X = numTop();
+
+  $("topTitle").textContent = `📊 Top ${X} Combined`;
+  $("topDesc").textContent = `Teams ranked by the combined total of their best ${X} golfers — lower is better`;
+  const topRows = teams.slice().sort((a, b) => (a.topSum ?? 1e9) - (b.topSum ?? 1e9));
+  $("topTable").innerHTML = `<tr><th>#</th><th>Team</th><th class=num>Top ${X} Total</th><th class=num>Counting</th></tr>` +
+    topRows.map((t, i) =>
+      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td class="num">${fmt(t.topSum)}</td>` +
+      `<td class="num">${t.counted}/${X}${t.rows.length >= X && t.counted < X ? " ⚠" : ""}</td></tr>`
+    ).join("");
 
   const bestRows = teams.slice().sort((a, b) => (a.best ? a.best.sc.total : 1e9) - (b.best ? b.best.sc.total : 1e9));
   $("bestTable").innerHTML = "<tr><th>#</th><th>Team</th><th>Best Golfer</th><th class=num>Total</th><th class=num>To Par</th></tr>" +
@@ -479,21 +504,15 @@ function renderStandings() {
       `<td class="num">${t.best ? fmt(t.best.sc.total) : "—"}</td><td class="num">${t.best ? esc(t.best.sc.toPar) : ""}</td></tr>`
     ).join("");
 
-  const avgRows = teams.slice().sort((a, b) => (a.avg ?? 1e9) - (b.avg ?? 1e9));
-  $("avgTable").innerHTML = "<tr><th>#</th><th>Team</th><th class=num>Avg Total</th><th class=num>Golfers Scored</th></tr>" +
-    avgRows.map((t, i) =>
-      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td class="num">${fmt(t.avg)}</td>` +
-      `<td class="num">${t.scoredCount}/${t.rows.length}${t.rows.length && t.scoredCount < t.rows.length ? " ⚠" : ""}</td></tr>`
-    ).join("");
-
-  // roster cards
+  // roster cards (✓ marks the golfers currently counting toward the Top X total)
   $("rosterScores").innerHTML = teams.map(t => {
     const rows = t.rows.map(r => {
       const sc = r.sc;
       const cls = sc.manual ? "manual" : (sc.out ? "cut" : "");
-      const total = sc.matched ? Math.round(sc.total * 100) / 100 : "—";
-      const note = sc.manual ? "manual" : (sc.matched ? (sc.out ? esc(sc.detail || "CUT") : `${esc(sc.toPar)}${sc.pos ? " · " + esc(sc.pos) : ""}`) : "no match");
-      return `<tr><td>${esc(r.pick.name)}</td><td class="num ${cls}">${total}</td><td class="${cls}">${note}</td></tr>`;
+      const isCounted = t.countedGids.has(r.pick.gid);
+      const total = sc.matched && sc.total != null ? Math.round(sc.total * 100) / 100 : "—";
+      const note = sc.manual ? "manual" : (sc.pending ? esc(sc.detail || "not started") : (sc.matched ? (sc.out ? esc(sc.detail || "CUT") : `${esc(sc.toPar)}${sc.pos ? " · " + esc(sc.pos) : ""}`) : "no match"));
+      return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${esc(r.pick.name)}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
     }).join("");
     return `<div class="roster-card"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>Total</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
   }).join("");
@@ -527,9 +546,12 @@ function renderAdmin() {
   if (document.activeElement !== tn && !tn.value) tn.value = owners().join("\n");
   const ri = $("roundsInput");
   if (document.activeElement !== ri && !ri.value) ri.value = numRounds();
+  const ti = $("topCountInput");
+  if (document.activeElement !== ti && !ti.value) ti.value = numTop();
 
   const inDraft = phase() === "draft" || draftDone();
-  $("saveConfig").disabled = inDraft;
+  $("teamNames").disabled = inDraft;
+  $("roundsInput").disabled = inDraft;
   $("saveOrder").disabled = inDraft;
   $("saveField").disabled = inDraft;
   $("startDraft").disabled = phase() !== "setup";
