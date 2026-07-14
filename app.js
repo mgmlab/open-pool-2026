@@ -616,17 +616,15 @@ function renderDraft() {
 
 function renderQueue() {
   const box = $("queueBox");
-  const eligible = me.owner && phase() === "draft" && !draftDone();
-  box.classList.toggle("hidden", !eligible);
-  if (!eligible) return;
   const q = liveQueue();
-  $("queueList").innerHTML = q.length
-    ? q.map((gid, i) =>
-        `<div class="queue-row"><span class="qnum">${i + 1}.</span><span class="name">${esc(S.golfers[gid].name)}</span><span class="odds">${esc(fmtOdds(S.golfers[gid].odds))}</span>` +
-        `<button data-qup="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-qdel="${i}">✕</button></div>`
-      ).join("") +
-      (autodraftOn(me.owner) ? "" : `<div class="muted small" style="padding-top:6px">⚠ Turn on "Autodraft my picks" for the queue to draft automatically.</div>`)
-    : `<div class="muted small">Empty — tap ➕ next to a golfer to queue them up.</div>`;
+  const show = me.owner && phase() === "draft" && !draftDone() && q.length > 0;
+  box.classList.toggle("hidden", !show);
+  if (!show) return;
+  $("queueList").innerHTML = q.map((gid, i) =>
+      `<div class="queue-row"><span class="qnum">${i + 1}.</span><span class="name">${esc(S.golfers[gid].name)}</span><span class="odds">${esc(fmtOdds(S.golfers[gid].odds))}</span>` +
+      `<button data-qup="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-qdel="${i}">✕</button></div>`
+    ).join("") +
+    (autodraftOn(me.owner) ? "" : `<div class="muted small" style="padding-top:6px">⚠ Turn on "Autodraft my picks" for the queue to draft automatically.</div>`);
 }
 
 function renderStandings() {
