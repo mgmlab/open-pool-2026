@@ -29,7 +29,7 @@ const ADMIN_HASH = "476bd2cff73bedea2bab7696c3e24f09a7fd075c163a4f42a80ee978d56b
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, autodraft: {}, loaded: false };
+const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, autodraft: {}, myQueue: [], loaded: false };
 const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null, par: 70 /* Royal Birkdale; real value read from feed */ };
 const me = { identity: null, owner: null, admin: false };
 
@@ -128,6 +128,30 @@ function resolveMySeat() {
     const hint = localStorage.getItem("op26_owner");
     if (hint && S.seats && !S.seats[hint]) localStorage.removeItem("op26_owner");
   }
+  subscribeQueue();
+}
+
+/* ---- pick queue: private per owner (/queues/{owner}, readable by that seat + admin).
+   Autodraft picks from the queue in order, then falls back to best available odds. */
+let queueRef = null, queueOwner = null;
+function subscribeQueue() {
+  if (queueOwner === me.owner) return;
+  if (queueRef) { queueRef.off(); queueRef = null; }
+  queueOwner = me.owner;
+  S.myQueue = [];
+  if (me.owner) {
+    queueRef = db.ref("queues/" + me.owner);
+    queueRef.on("value", s => { S.myQueue = s.val() || []; render(); }, () => { S.myQueue = []; });
+  }
+}
+
+// current queue with drafted/unknown golfers pruned
+const liveQueue = () => (S.myQueue || []).filter(g => S.golfers[g] && S.pickedGolfers[g] == null);
+
+async function writeQueue(arr) {
+  if (!me.owner) return;
+  try { await db.ref("queues/" + me.owner).set(arr.length ? arr : null); }
+  catch (e) { alert("Couldn't save queue — admin may still need to update the database rules. (" + e.message + ")"); }
 }
 
 /* ================= DERIVED ================= */
@@ -205,14 +229,24 @@ function scheduleAutodraft() {
   const i = currentPick();
   if (autodraftArmedFor === i) return;
   autodraftArmedFor = i;
-  setTimeout(() => {
+  setTimeout(async () => {
     // re-verify at fire time — state may have moved, or the flag may have been turned off
     if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
-    const best = Object.entries(S.golfers)
-      .filter(([gid]) => S.pickedGolfers[gid] == null)
-      .map(([gid, g]) => ({ gid, ...g }))
-      .sort(golferCompare)[0];
-    if (best) makePick(best.gid, true);
+    // queued golfers first (their own page has it cached; the admin's page reads it on demand)
+    let gid = null;
+    try {
+      const q = me.owner === clockOwner ? (S.myQueue || []) : ((await db.ref("queues/" + clockOwner).once("value")).val() || []);
+      gid = q.find(g => S.golfers[g] && S.pickedGolfers[g] == null) || null;
+    } catch (e) { /* queue unreadable — fall back to best odds */ }
+    if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
+    if (!gid) {
+      const best = Object.entries(S.golfers)
+        .filter(([g]) => S.pickedGolfers[g] == null)
+        .map(([g, v]) => ({ gid: g, ...v }))
+        .sort(golferCompare)[0];
+      gid = best ? best.gid : null;
+    }
+    if (gid) makePick(gid, true);
   }, 2500);
 }
 
@@ -498,7 +532,7 @@ function renderAutodraft() {
   chk.checked = !!(me.owner && autodraftOn(me.owner));
   const show = eligible && autodraftOn(me.owner);
   ab.classList.toggle("hidden", !show);
-  if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (best available odds), even if your screen locks. Uncheck "Autodraft my picks" to take back control.`;
+  if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (your queue first, then best available odds), even if your screen locks. Uncheck "Autodraft my picks" to take back control.`;
 }
 
 function renderBanner() {
@@ -545,10 +579,15 @@ function renderDraft() {
     .sort(golferCompare);
   $("availCount").textContent = `(${avail.length})`;
   const canPick = phase() === "draft" && !draftDone() && (me.admin || me.owner === onClockOwner());
+  const canQueue = me.owner && phase() === "draft" && !draftDone();
+  const queued = new Set(liveQueue());
   $("golferList").innerHTML = avail.map(g =>
     `<div class="golfer-row"><span class="name">${esc(g.name)}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>` +
+    (canQueue ? `<button data-qadd="${esc(g.gid)}" title="add to my queue" ${queued.has(g.gid) ? "disabled" : ""}>➕</button>` : "") +
     `<button data-gid="${esc(g.gid)}" ${canPick ? "" : "disabled"}>Draft</button></div>`
   ).join("") || `<p class="muted">No golfers${Object.keys(S.golfers || {}).length ? " match" : " loaded — admin pastes the field before the draft"}.</p>`;
+
+  renderQueue();
 
   // board
   const order = draftOrder() || owners();
@@ -573,6 +612,21 @@ function renderDraft() {
   $("pickLog").innerHTML = picks.map(p =>
     `<div>#${p.idx + 1} (R${Math.floor(p.idx / numTeams()) + 1}.${p.idx % numTeams() + 1}) <b>${esc(p.owner)}</b> — ${esc(p.name)} ${esc(fmtOdds(p.odds))}</div>`
   ).join("") || `<div>No picks yet.</div>`;
+}
+
+function renderQueue() {
+  const box = $("queueBox");
+  const eligible = me.owner && phase() === "draft" && !draftDone();
+  box.classList.toggle("hidden", !eligible);
+  if (!eligible) return;
+  const q = liveQueue();
+  $("queueList").innerHTML = q.length
+    ? q.map((gid, i) =>
+        `<div class="queue-row"><span class="qnum">${i + 1}.</span><span class="name">${esc(S.golfers[gid].name)}</span><span class="odds">${esc(fmtOdds(S.golfers[gid].odds))}</span>` +
+        `<button data-qup="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-qdel="${i}">✕</button></div>`
+      ).join("") +
+      (autodraftOn(me.owner) ? "" : `<div class="muted small" style="padding-top:6px">⚠ Turn on "Autodraft my picks" for the queue to draft automatically.</div>`)
+    : `<div class="muted small">Empty — tap ➕ next to a golfer to queue them up.</div>`;
 }
 
 function renderStandings() {
@@ -734,7 +788,18 @@ $("autodraftChk").addEventListener("change", async e => {
   render();
 });
 $("golferSearch").addEventListener("input", renderDraft);
-$("golferList").addEventListener("click", e => { const gid = e.target.dataset?.gid; if (gid) makePick(gid); });
+$("golferList").addEventListener("click", e => {
+  const qadd = e.target.dataset?.qadd;
+  if (qadd) { writeQueue([...liveQueue(), qadd]); return; }
+  const gid = e.target.dataset?.gid;
+  if (gid) makePick(gid);
+});
+$("queueList").addEventListener("click", e => {
+  const q = liveQueue();
+  const up = e.target.dataset?.qup, del = e.target.dataset?.qdel;
+  if (up != null) { const i = +up; if (i > 0) { [q[i - 1], q[i]] = [q[i], q[i - 1]]; writeQueue(q); } }
+  else if (del != null) { q.splice(+del, 1); writeQueue(q); }
+});
 $("refreshScores").addEventListener("click", () => fetchScores(true));
 
 $("adminUnlock").addEventListener("click", adminUnlock);

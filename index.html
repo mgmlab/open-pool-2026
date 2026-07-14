@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <header>
@@ -36,6 +36,10 @@
     <div class="draft-layout">
       <div class="panel" id="pickPanel">
         <h2>Available Golfers <span id="availCount" class="muted"></span></h2>
+        <div id="queueBox" class="queue-box hidden">
+          <h3>My Queue <span class="muted small">(auto-picks in order when Autodraft is on)</span></h3>
+          <div id="queueList"></div>
+        </div>
         <input type="search" id="golferSearch" placeholder="Search golfers&hellip;" autocomplete="off">
         <div id="golferList" class="golfer-list"></div>
       </div>
@@ -131,6 +135,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
