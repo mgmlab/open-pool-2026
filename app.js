@@ -619,10 +619,10 @@ function renderStandings() {
     ? `<td><b>${esc(lead.names)}</b> ${fmtToPar(lead.value)}${lead.tie ? " — tie" : ""}</td><td>${done ? '<span class="counted">🏆 WINNER — pays out</span>' : '<span class="muted">current leader</span>'}</td>`
     : `<td class="muted">—</td><td class="muted">waiting on scores</td>`;
   $("payoutTable").innerHTML =
-    `<tr><th>Prize</th><th>How it's won</th><th>Leader</th><th>Status</th></tr>` +
-    `<tr><td><b>🥈 Round 2 Payout</b></td><td>Top ${X} Combined leader at the end of Round 2</td>${payCell(r2Lead, r2done)}</tr>` +
-    `<tr><td><b>🏆 Overall Winner</b></td><td>Top ${X} Combined at the end of the tournament</td>${payCell(ovLead, finalDone)}</tr>` +
-    `<tr><td><b>⭐ Best Golfer</b></td><td>Lowest single golfer score at the end of the tournament</td>${payCell(bgLead, finalDone)}</tr>`;
+    `<tr><th>Prize</th><th>Leader</th><th>Status</th><th>How it's won</th></tr>` +
+    `<tr><td><b>🥈 Round 2 Payout</b></td>${payCell(r2Lead, r2done)}<td class="muted">Top ${X} Combined leader at the end of Round 2</td></tr>` +
+    `<tr><td><b>🏆 Overall Winner</b></td>${payCell(ovLead, finalDone)}<td class="muted">Top ${X} Combined at the end of the tournament</td></tr>` +
+    `<tr><td><b>⭐ Best Golfer</b></td>${payCell(bgLead, finalDone)}<td class="muted">Lowest single golfer score at the end of the tournament</td></tr>`;
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
   $("rosterScores").innerHTML = teams.map(t => {
