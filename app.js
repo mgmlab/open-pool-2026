@@ -778,7 +778,7 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
 $("autodraftChk").addEventListener("change", async e => {
   if (!me.owner) return;
-  if (e.target.checked && !confirm("Enable autodraft? When you're on the clock, the best available golfer (by odds) will be drafted for you automatically — even if you put your phone away.")) {
+  if (e.target.checked && !confirm("Enable autodraft? When you're on the clock, your pick will be made automatically — from your queue first (in order), otherwise the best available golfer by odds — even if you put your phone away.")) {
     e.target.checked = false;
     return;
   }
