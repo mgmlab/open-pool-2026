@@ -1,0 +1,156 @@
+<title>Draft Recap — mockup</title>
+<style>
+  /* Faithful copy of the live site's stylesheet (dark theme, single-theme by design) */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e1712; --panel: #16241c; --panel2: #1d2f24; --line: #2c4433;
+    --text: #e8f0e9; --muted: #8fa697; --green: #3ddc84; --gold: #f5c518; --red: #ff6b6b;
+  }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 0 16px 40px; max-width: 1400px; margin: 0 auto;
+  }
+  .muted { color: var(--muted); } .small { font-size: 0.85em; }
+  header { padding: 14px 0 4px; }
+  .header-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.1rem; margin-bottom: 8px; }
+  h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .banner {
+    margin: 12px 0; padding: 18px 22px; border-radius: 12px;
+    font-size: 1.6rem; font-weight: 800; text-align: center; letter-spacing: 0.02em;
+    background: linear-gradient(90deg, #1a3a5c, #2e5a8b); border: 2px solid #6ab0ff;
+  }
+  .mocktag {
+    display: inline-block; background: #3a2a10; border: 1px solid #7a5b00; color: #ffd97a;
+    border-radius: 6px; padding: 4px 10px; font-size: .8rem; margin-top: 10px;
+  }
+  nav#tabs { display: flex; gap: 6px; margin: 8px 0 16px; border-bottom: 1px solid var(--line); }
+  .tab { background: none; border: none; color: var(--muted); padding: 10px 18px; font-size: 1rem; border-bottom: 3px solid transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--green); font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: var(--panel2); }
+  #board td { min-width: 110px; }
+  #board td.filled { background: var(--panel2); }
+  #board td .odds { color: var(--muted); font-size: 0.78em; margin-left: 4px; }
+  footer { margin-top: 24px; text-align: center; }
+
+  /* recap styles (the new bit) */
+  .recap-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .recap-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .recap-head .rank { color: var(--muted); font-size: .85rem; }
+  .recap-head .team { font-size: 1.1rem; font-weight: 800; }
+  .recap-head .grade {
+    margin-left: auto; font-weight: 900; font-size: 1.25rem; color: var(--gold);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 12px;
+  }
+  .tagline { color: var(--green); font-weight: 600; font-size: .92rem; margin: 6px 0 8px; }
+  .blurb { line-height: 1.55; font-size: .92rem; margin: 0 0 10px; max-width: 70ch; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: .78rem; color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.steal { border-color: #2c5c3a; } .chip.steal b { color: var(--green); }
+  .chip.reach { border-color: #5c2c2c; } .chip.reach b { color: var(--red); }
+
+  /* faithful copy of the live mobile rules */
+  @media (max-width: 768px) {
+    body { padding: 0 8px 24px; }
+    h1 { font-size: 1.05rem; }
+    .banner { font-size: 1.05rem; padding: 10px 12px; margin: 8px 0; position: sticky; top: 4px; z-index: 50; }
+    nav#tabs { position: sticky; top: 0; background: var(--bg); z-index: 40; margin-top: 0; }
+    .tab { flex: 1; padding: 10px 4px; font-size: 0.95rem; text-align: center; }
+    .panel { padding: 10px; margin-bottom: 12px; }
+    table { font-size: 0.8rem; }
+    th, td { padding: 4px 6px; }
+    #board { font-size: 0.72rem; }
+    #board td { min-width: 78px; padding: 4px 5px; }
+  }
+</style>
+
+<header>
+  <div class="header-row"><h1>⛳ The Open - 2026 Snake Draft</h1></div>
+  <span class="mocktag">MOCKUP — round 8 shown as pending; grades subject to libel claims</span>
+  <div class="banner">✅ Draft complete — scores update during The Open</div>
+</header>
+
+<nav id="tabs">
+  <button class="tab active">Draft</button>
+  <button class="tab">Standings</button>
+  <button class="tab">Admin</button>
+</nav>
+
+<div class="panel">
+  <h2>📋 Draft Recap</h2>
+  <p class="muted small" style="margin-bottom:12px">The Available Golfers list retired when pick 56 landed. In its place: one analyst's completely objective, legally-non-binding team grades.</p>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">1.</span><span class="team">Gary</span><span class="grade">A−</span></div>
+    <div class="tagline">The chalk doesn't apologize.</div>
+    <p class="blurb">Drew the #1 seat and did the boring, correct thing: took Scottie Scheffler, the best golfer alive and the defending Open champion, and let everyone else get creative. Hatton is a top-ten machine who plays links golf angry, which is the correct way to play links golf. Koepka at +6000 in a major is either a bargain or a séance. Then he closed with Rickie Fowler, a pick made entirely by the heart. The heart remembers 2014. The scorecard may not.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Hatton R2</b></span><span class="chip reach">🚩 Sentimental: <b>Fowler R7</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">2.</span><span class="team">Ram</span><span class="grade">A−</span></div>
+    <div class="tagline">Drafted the entire Birkdale gift shop.</div>
+    <p class="blurb">Tommy Fleetwood grew up in Southport — Royal Birkdale is functionally his backyard, and the crowd will treat him like a golden retriever who learned to putt. Lowry has a Claret Jug, Cam Smith has a Claret Jug, and MacIntyre is a Scot who thinks 40 mph wind is "a nice day out." A roster built by someone who understands what tournament this is. The only question is whether Cam Smith remembers he's Cam Smith.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Lowry R3</b></span><span class="chip">📍 Local knowledge: <b>Fleetwood R1</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">3.</span><span class="team">Ronnie</span><span class="grade">B+</span></div>
+    <div class="tagline">One pick doing a LOT of heavy lifting.</div>
+    <p class="blurb">Morikawa in round 1 is a former Open champion with the best iron play on earth — sturdy. But the headline is Jordan Spieth in round 4: the man won the 2017 Open <i>at this exact golf course</i>, including the greatest bogey in major history off a driving range. If ghosts are real, Ronnie owns one. The supporting cast (Hovland, Burns) treats seaside golf like a personal insult, so this is three guys and a prayer. Good news: you only count four.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Spieth R4 — won HERE in 2017</b></span><span class="chip reach">🚩 Links allergy: <b>Burns R3</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">4.</span><span class="team">GF</span><span class="grade">B+</span></div>
+    <div class="tagline">Main-character energy, questionable supporting cast.</div>
+    <p class="blurb">Rory at #2 overall is the easiest pick anyone made all night, and Gotterup in round 3 is the sneaky-sicko selection — the man has decided he only plays well on this side of the Atlantic. Bryson on a links course remains science's greatest experiment: 190 ball speed into a 30 mph crosswind, results may vary. And then there's Patrick Reed, who will grind out pars from a parking lot and make the whole group uncomfortable doing it. Chaotic. Watchable. Possibly good?</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Gotterup R3</b></span><span class="chip reach">🚩 Science experiment: <b>Bryson R2</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">5.</span><span class="team">Ace</span><span class="grade">B</span></div>
+    <div class="tagline">Two aircraft carriers and a jet ski.</div>
+    <p class="blurb">Rahm and Xander back-to-back is as good a 1-2 punch as this draft allowed — a two-time major champ and the guy who lifted the Jug in '24. Then, with the entire adult population of the leaderboard available, Ace took Akshay Bhatia at +10000 in round 3 — a reach so bold Vegas briefly halted betting to ask if he knew something. Henley is quietly the most underrated pick nobody will talk about. Top-heavy, but in a top-4 format, heavy tops win.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Henley R4</b></span><span class="chip reach">🚩 Reach: <b>Bhatia R3 at +10000</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">6.</span><span class="team">Phillips</span><span class="grade">B−</span></div>
+    <div class="tagline">Passed on the odds board to draft a memory.</div>
+    <p class="blurb">Justin Rose at pick 5 raised eyebrows — until you remember a 17-year-old Rose holed out from the rough on Birkdale's 72nd hole in '98 and made a whole country cry. A reach with a soundtrack. Åberg in round 2 is real value, JT brings two majors and one mood swing, and Brian Harman in round 6 is the heist of the draft: won the 2023 Open by six while everyone complained about him. No ceiling-raiser, but a shockingly firm floor. Like Harman himself.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Harman R6 — '23 Champion Golfer</b></span><span class="chip reach">🚩 Reach: <b>Rose R1</b></span></div>
+  </div>
+
+  <div class="recap-card">
+    <div class="recap-head"><span class="rank">7.</span><span class="team">Dragon</span><span class="grade">C+</span></div>
+    <div class="tagline">A beautiful spreadsheet with a links problem.</div>
+    <p class="blurb">Matt Fitzpatrick in round 1 is tidy, sensible, very U.S. Open of him. But Wyndham Clark's career record at the Open reads like a ransom note, and Cantlay at links golf is the human embodiment of a 45-minute pre-shot routine into a double bogey. Min Woo Lee is the redemption arc — chef hat on, let him cook, the kid was built for weather. On paper this team is fine. Unfortunately the Open is not played on paper; it's played in a wind tunnel with pot bunkers.</p>
+    <div class="chips"><span class="chip steal">💎 Steal: <b>Min Woo R4</b></span><span class="chip reach">🚩 Links allergy: <b>Clark R3, Cantlay R5</b></span></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Draft Board</h2>
+  <div class="table-wrap"><table id="board">
+    <tr><th>Rd</th><th>Gary</th><th>GF</th><th>Dragon</th><th>Ram</th><th>Phillips</th><th>Ronnie</th><th>Ace</th></tr>
+    <tr><th>1</th><td class="filled">Scottie Scheffler<span class="odds">+700</span></td><td class="filled">Rory McIlroy<span class="odds">+850</span></td><td class="filled">Matt Fitzpatrick<span class="odds">+1500</span></td><td class="filled">Tommy Fleetwood<span class="odds">+1800</span></td><td class="filled">Justin Rose<span class="odds">+3000</span></td><td class="filled">Collin Morikawa<span class="odds">+3000</span></td><td class="filled">Jon Rahm<span class="odds">+2200</span></td></tr>
+    <tr><th>2</th><td class="filled">Tyrrell Hatton<span class="odds">+3500</span></td><td class="filled">Bryson DeChambeau<span class="odds">+5000</span></td><td class="filled">Cameron Young<span class="odds">+3000</span></td><td class="filled">Robert MacIntyre<span class="odds">+3300</span></td><td class="filled">Ludvig Åberg<span class="odds">+3300</span></td><td class="filled">Viktor Hovland<span class="odds">+4000</span></td><td class="filled">Xander Schauffele<span class="odds">+2500</span></td></tr>
+    <tr><th>3</th><td class="filled">Brooks Koepka<span class="odds">+6000</span></td><td class="filled">Chris Gotterup<span class="odds">+3000</span></td><td class="filled">Wyndham Clark<span class="odds">+3000</span></td><td class="filled">Shane Lowry<span class="odds">+6000</span></td><td class="filled">Justin Thomas<span class="odds">+6000</span></td><td class="filled">Sam Burns<span class="odds">+4500</span></td><td class="filled">Akshay Bhatia<span class="odds">+10000</span></td></tr>
+    <tr><th>4</th><td class="filled">Si Woo Kim<span class="odds">+6000</span></td><td class="filled">Patrick Reed<span class="odds">+5500</span></td><td class="filled">Min Woo Lee<span class="odds">+6500</span></td><td class="filled">Tom Kim<span class="odds">+5000</span></td><td class="filled">Aaron Rai<span class="odds">+6500</span></td><td class="filled">Jordan Spieth<span class="odds">+6500</span></td><td class="filled">Russell Henley<span class="odds">+4500</span></td></tr>
+    <tr><th>5</th><td class="filled">Ben Griffin<span class="odds">+10000</span></td><td class="filled">Adam Scott<span class="odds">+10000</span></td><td class="filled">Patrick Cantlay<span class="odds">+7000</span></td><td class="filled">Cameron Smith<span class="odds">+10000</span></td><td class="filled">JJ Spaun<span class="odds">+10000</span></td><td class="filled">Harris English<span class="odds">+10000</span></td><td class="filled">Joaquin Niemann<span class="odds">+6000</span></td></tr>
+    <tr><th>6</th><td class="filled">Maverick McNealy<span class="odds">+10000</span></td><td class="filled">Bud Cauley<span class="odds">+15000</span></td><td class="filled">Kristoffer Reitan<span class="odds">+10000</span></td><td class="filled">Corey Conners<span class="odds">+10000</span></td><td class="filled">Brian Harman<span class="odds">+10000</span></td><td class="filled">Hideki Matsuyama<span class="odds">+10000</span></td><td class="filled">Alex Fitzpatrick<span class="odds">+6500</span></td></tr>
+    <tr><th>7</th><td class="filled">Rickie Fowler<span class="odds">+10000</span></td><td class="filled">Nicolai Højgaard<span class="odds">+10000</span></td><td class="filled">Michael Thorbjornsen<span class="odds">+10000</span></td><td class="filled">Sepp Straka<span class="odds">+12500</span></td><td class="filled">Alex Noren<span class="odds">+12500</span></td><td class="filled">Eugenio Chacarra<span class="odds">+12500</span></td><td class="filled">Kurt Kitayama<span class="odds">+10000</span></td></tr>
+    <tr><th>8</th><td class="muted">pending</td><td class="muted">pending</td><td class="muted">pending</td><td class="muted">pending</td><td class="muted">pending</td><td class="muted">pending</td><td class="muted">pending</td></tr>
+  </table></div>
+</div>
+
+<footer class="muted small">Live scores from ESPN &middot; polls every 3 min during the tournament &middot; missed cut = 80 for R3 &amp; R4</footer>
