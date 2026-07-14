@@ -360,7 +360,7 @@ async function undoPick() {
 async function resetDraft() {
   if (!confirm("Reset the draft? All picks are erased (field & seats kept).")) return;
   if (!confirm("Are you sure? This cannot be undone.")) return;
-  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || owners() } });
+  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, "config/recap": null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || owners() } });
 }
 
 async function fullReset() {
@@ -368,6 +368,7 @@ async function fullReset() {
   if (!confirm("Really erase everything?")) return;
   await db.ref().update({
     picks: null, pickedGolfers: null, schedule: null, golfers: null, seats: null, overrides: null,
+    "config/recap": null,
     state: { phase: "setup", currentPick: 0, draftOrder: owners() }
   });
 }
@@ -570,7 +571,26 @@ function renderSeatBar() {
   sel.classList.remove("hidden"); btn.classList.remove("hidden");
 }
 
+function renderRecap(recap) {
+  $("recapIntro").textContent = recap.intro || "";
+  $("recapBody").innerHTML = (recap.teams || []).map((t, i) =>
+    `<div class="recap-card">` +
+    `<div class="recap-head"><span class="rank">${i + 1}.</span><span class="team">${esc(t.owner)}</span><span class="grade">${esc(t.grade || "")}</span></div>` +
+    (t.tagline ? `<div class="tagline">${esc(t.tagline)}</div>` : "") +
+    `<p class="blurb">${esc(t.blurb || "")}</p>` +
+    `<div class="chips">${(t.chips || []).map(c => `<span class="chip ${c.kind === "steal" ? "steal" : (c.kind === "reach" ? "reach" : "")}">${esc(c.text)}</span>`).join("")}</div>` +
+    `</div>`
+  ).join("");
+}
+
 function renderDraft() {
+  // once the draft is complete and a recap has been published, it replaces the pick panel
+  const recap = S.config && S.config.recap;
+  const showRecap = draftDone() && recap && recap.teams;
+  $("recapPanel").classList.toggle("hidden", !showRecap);
+  $("pickPanel").classList.toggle("hidden", !!showRecap);
+  if (showRecap) renderRecap(recap);
+
   // available golfers
   const q = normName($("golferSearch").value || "");
   const avail = Object.entries(S.golfers || {})

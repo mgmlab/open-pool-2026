@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <header>
@@ -33,6 +33,11 @@
 <main>
   <!-- ============ DRAFT TAB ============ -->
   <section id="tab-draft">
+    <div class="panel hidden" id="recapPanel">
+      <h2>📋 Draft Recap</h2>
+      <p class="muted small" id="recapIntro"></p>
+      <div id="recapBody"></div>
+    </div>
     <div class="draft-layout">
       <div class="panel" id="pickPanel">
         <h2>Available Golfers <span id="availCount" class="muted"></span></h2>
@@ -135,6 +140,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
