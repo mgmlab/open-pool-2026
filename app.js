@@ -415,6 +415,7 @@ async function fetchScores(manual) {
     if (manual) alert("Score fetch failed: " + e.message);
   }
   renderStandings();
+  renderAdmin();
 }
 
 let pollTimer = null;
@@ -757,7 +758,7 @@ function renderAdmin() {
       (picks.map(p => {
         const ov = (S.overrides || {})[p.gid] || {};
         const sc = golferScore(p.gid);
-        const match = sc.manual ? "manual" : (sc.matched ? "✓ " + esc(sc.espnName || "") : (espn.competitors.length ? "✗ NO MATCH" : "?"));
+        const match = sc.manual ? "manual" : (sc.matched ? "✓ " + esc(sc.espnName || "") : (espn.competitors.length ? "✗ NO MATCH" : "loading…"));
         return `<tr><td>${esc(p.name)}</td><td>${esc(p.owner)}</td><td>${match}</td>` +
           `<td><input type="text" data-espnname="${esc(p.gid)}" value="${esc(ov.espnName || "")}" placeholder="exact ESPN name"></td>` +
           `<td><input type="number" data-score="${esc(p.gid)}" value="${esc(ov.score ?? "")}" placeholder="to par, e.g. -3 or 19"></td>` +
@@ -770,7 +771,7 @@ function renderAdmin() {
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
   for (const t of ["draft", "standings", "admin"]) $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
-  if (btn.dataset.tab === "standings" && Date.now() - espn.fetchedAt > POLL_MS) fetchScores(false);
+  if ((btn.dataset.tab === "standings" || btn.dataset.tab === "admin") && Date.now() - espn.fetchedAt > POLL_MS) fetchScores(false);
 }));
 
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
