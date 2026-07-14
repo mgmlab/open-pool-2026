@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header>
@@ -55,6 +55,10 @@
       <button id="refreshScores">Refresh now</button>
     </div>
     <div id="unmatchedWarn" class="warn hidden"></div>
+    <div class="panel" id="payoutPanel">
+      <h2>💰 Payouts</h2>
+      <div class="table-wrap"><table id="payoutTable"></table></div>
+    </div>
     <div class="standings-layout">
       <div class="panel grow">
         <h2 id="topTitle">📊 Top 4 Combined</h2>
@@ -127,6 +131,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

@@ -417,6 +417,49 @@ function golferScore(gid) {
   return { ...base, total: c.liveToPar };
 }
 
+/* ---- payout helpers (display-only) ---- */
+// true once every still-active competitor has posted rounds 1..r
+function roundComplete(r) {
+  const active = espn.competitors.filter(c => !c.out);
+  if (!active.length) return false;
+  return active.every(c => {
+    for (let k = 1; k <= r; k++) if (!Number.isFinite(c.rounds[k])) return false;
+    return true;
+  });
+}
+
+// golfer to-par using only rounds 1..thru (retroactively stable once those rounds are posted)
+function golferScoreAt(gid, thru) {
+  const ov = (S.overrides || {})[gid] || {};
+  if (ov.score != null && ov.score !== "") return Number(ov.score);
+  const g = S.golfers[gid];
+  if (!g) return null;
+  const c = espn.byNorm[ov.espnName ? normName(ov.espnName) : normName(g.name)];
+  if (!c) return null;
+  let total = 0, played = 0;
+  for (let r = 1; r <= thru; r++) {
+    if (Number.isFinite(c.rounds[r])) { total += c.rounds[r] - espn.par; played++; }
+    else if (c.out) { total += CUT_SCORE - espn.par; }
+  }
+  return played === 0 && !c.out ? null : total;
+}
+
+// Top X Combined standings using only rounds 1..thru
+function topAt(thru) {
+  return owners().map(o => {
+    const totals = teamRoster(o).map(p => golferScoreAt(p.gid, thru)).filter(v => v != null).sort((a, b) => a - b).slice(0, numTop());
+    return { owner: o, sum: totals.length ? totals.reduce((s, v) => s + v, 0) : null };
+  }).sort((a, b) => (a.sum ?? 1e9) - (b.sum ?? 1e9));
+}
+
+// all teams tied for the lead of a sorted standings list
+function leadersOf(rows, key) {
+  const first = rows[0];
+  if (!first || first[key] == null) return null;
+  const names = rows.filter(r => r[key] === first[key]).map(r => r.owner);
+  return { names: names.join(" & "), value: first[key], tie: names.length > 1 };
+}
+
 function computeStandings() {
   const teams = [];
   const unmatched = [];
@@ -563,6 +606,23 @@ function renderStandings() {
       `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td>${t.best ? esc(t.best.pick.name) : "—"}</td>` +
       `<td class="num">${t.best ? fmtToPar(t.best.sc.total) : "—"}</td><td>${t.best ? esc(t.best.sc.pos || "") : ""}</td></tr>`
     ).join("");
+
+  // payouts (display-only): R2 prize freezes from per-round data once R2 is complete
+  const r2done = espn.eventStatus === "STATUS_FINAL" || roundComplete(2);
+  const finalDone = espn.eventStatus === "STATUS_FINAL";
+  const liveTop = topRows.map(t => ({ owner: t.owner, sum: t.topSum }));
+  const r2Lead = r2done ? leadersOf(topAt(2), "sum") : leadersOf(liveTop, "sum");
+  const ovLead = leadersOf(liveTop, "sum");
+  const bgFirst = bestRows[0] && bestRows[0].best ? bestRows.filter(t => t.best && t.best.sc.total === bestRows[0].best.sc.total) : [];
+  const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`).join(" & "), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
+  const payCell = (lead, done) => lead
+    ? `<td><b>${esc(lead.names)}</b> ${fmtToPar(lead.value)}${lead.tie ? " — tie" : ""}</td><td>${done ? '<span class="counted">🏆 WINNER — pays out</span>' : '<span class="muted">current leader</span>'}</td>`
+    : `<td class="muted">—</td><td class="muted">waiting on scores</td>`;
+  $("payoutTable").innerHTML =
+    `<tr><th>Prize</th><th>How it's won</th><th>Leader</th><th>Status</th></tr>` +
+    `<tr><td><b>🥈 Round 2 Payout</b></td><td>Top ${X} Combined leader at the end of Round 2</td>${payCell(r2Lead, r2done)}</tr>` +
+    `<tr><td><b>🏆 Overall Winner</b></td><td>Top ${X} Combined at the end of the tournament</td>${payCell(ovLead, finalDone)}</tr>` +
+    `<tr><td><b>⭐ Best Golfer</b></td><td>Lowest single golfer score at the end of the tournament</td>${payCell(bgLead, finalDone)}</tr>`;
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
   $("rosterScores").innerHTML = teams.map(t => {
