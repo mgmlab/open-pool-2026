@@ -52,6 +52,18 @@
         ".validate": "newData.hasChildren(['idx', 'owner', 'gid', 'name']) && newData.child('idx').val() === root.child('state/currentPick').val()"
       }
     },
+    "views": {
+      ".read": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$id": {
+        ".write": "auth != null && $id === auth.uid"
+      }
+    },
+    "presence": {
+      ".read": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$id": {
+        ".write": "auth != null && $id === auth.uid"
+      }
+    },
     "queues": {
       "$owner": {
         ".read": "auth != null && (root.child('seats').child($owner).val() === auth.uid || root.child('admin/authorized').child(auth.uid).exists())",

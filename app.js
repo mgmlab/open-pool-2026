@@ -89,8 +89,51 @@ firebase.auth().signInAnonymously().catch(() => { /* anon auth not enabled yet �
 firebase.auth().onAuthStateChanged(u => {
   me.identity = u ? u.uid : deviceId();
   resolveMySeat();
+  logVisit();
+  setupPresence();
   render();
 });
+
+/* ---- usage stats (admin-only visibility): one view log per page load + live presence ---- */
+let viewLogged = false;
+function logVisit() {
+  if (viewLogged || !me.identity) return;
+  viewLogged = true;
+  db.ref("views/" + me.identity).update({
+    count: firebase.database.ServerValue.increment(1),
+    last: firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {});
+}
+
+let presenceFor = null;
+function setupPresence() {
+  if (!me.identity || presenceFor === me.identity || !firebase.auth().currentUser) return;
+  presenceFor = me.identity;
+  const ref = db.ref("presence/" + me.identity);
+  db.ref(".info/connected").on("value", s => {
+    if (s.val()) {
+      ref.onDisconnect().remove().catch(() => {});
+      ref.set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
+    }
+  });
+}
+
+let statsSubscribed = false;
+function subscribeAdminStats() {
+  if (statsSubscribed || !me.admin) return;
+  statsSubscribed = true;
+  db.ref("views").on("value", s => { S.views = s.val() || {}; renderAdmin(); }, () => {});
+  db.ref("presence").on("value", s => { S.presence = s.val() || {}; renderAdmin(); }, () => {});
+}
+
+function ago(ts) {
+  if (!ts) return "—";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
 if (!firebase.auth().currentUser) { me.identity = deviceId(); }
 
 let connected = null;
@@ -261,6 +304,7 @@ async function adminUnlock() {
   const uid = firebase.auth().currentUser?.uid;
   if (uid) db.ref("admin/authorized/" + uid).set(hash).catch(() => {});
   db.ref("admin/passHash").set(hash).catch(() => {}); // seeds on first run; locked writes ignore
+  subscribeAdminStats();
   render();
 }
 
@@ -770,6 +814,26 @@ function renderAdmin() {
     return `<div>${esc(o)}:${state} ${v ? `claimed <span class="muted small">(${esc(String(v).slice(0, 12))}…)</span> <button data-clearseat="${esc(o)}">clear</button>` : '<span class="muted">open</span>'} <button data-autodraft="${esc(o)}">turn autodraft ${on ? "OFF" : "ON"}</button></div>`;
   }).join("");
 
+  // usage stats (populated only after subscribeAdminStats)
+  if (S.views || S.presence) {
+    const views = S.views || {}, pres = S.presence || {};
+    const seatIds = {};
+    for (const o of owners()) if ((S.seats || {})[o]) seatIds[S.seats[o]] = o;
+    let rows = "";
+    for (const o of owners()) {
+      const id = (S.seats || {})[o];
+      const v = id ? views[id] : null;
+      rows += `<tr><td>${id && pres[id] ? "🟢 " : ""}<b>${esc(o)}</b>${id ? "" : ' <span class="muted small">(no seat claimed)</span>'}</td><td class="num">${v ? v.count || 0 : 0}</td><td>${v ? ago(v.last) : "never"}</td></tr>`;
+    }
+    const specIds = Object.keys(views).filter(id => !seatIds[id]);
+    const specViews = specIds.reduce((s, id) => s + (views[id].count || 0), 0);
+    const specLast = specIds.reduce((m, id) => Math.max(m, views[id].last || 0), 0);
+    const specOnline = Object.keys(pres).filter(id => !seatIds[id]).length;
+    rows += `<tr><td>${specOnline ? "🟢 " : ""}Spectators (${specIds.length} device${specIds.length === 1 ? "" : "s"})</td><td class="num">${specViews}</td><td>${specLast ? ago(specLast) : "never"}</td></tr>`;
+    $("usageBox").innerHTML = `<div class="table-wrap"><table><tr><th>Who</th><th class=num>Views</th><th>Last seen</th></tr>${rows}</table></div>` +
+      `<p class="muted small" style="margin-top:6px">🟢 = on the site right now &middot; views are page loads since this feature went live</p>`;
+  }
+
   // scoring fixes table (skip rebuild while editing)
   const ft = $("fixTable");
   if (!ft.contains(document.activeElement)) {
@@ -855,7 +919,8 @@ $("fixTable").addEventListener("click", e => {
   const saved = localStorage.getItem("op26_admin");
   if (saved && (await sha256Hex(saved)) === ADMIN_HASH) {
     me.admin = true;
-    firebase.auth().onAuthStateChanged(u => { if (u) db.ref("admin/authorized/" + u.uid).set(ADMIN_HASH).catch(() => {}); });
+    firebase.auth().onAuthStateChanged(u => { if (u) { db.ref("admin/authorized/" + u.uid).set(ADMIN_HASH).catch(() => {}); subscribeAdminStats(); } });
+    subscribeAdminStats();
     render();
   }
 })();
