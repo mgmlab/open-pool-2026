@@ -480,6 +480,7 @@ async function fetchScores(manual) {
   }
   renderStandings();
   renderAdmin();
+  renderBanner(); // banner visibility depends on eventStatus once the draft is done
 }
 
 /* ---- hole-by-hole scorecard modal (display-only, fetched on demand) ---- */
@@ -668,7 +669,16 @@ function renderBanner() {
   if (!S.loaded) { b.classList.add("hidden"); }
   else if (!S.state) { b.textContent = "Not initialized — admin: unlock the Admin tab and press Full reset."; }
   else if (phase() === "setup") { b.textContent = "🏌️ Draft has not started yet"; }
-  else if (draftDone()) { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); title = "🏆 The Open - 2026 Snake Draft"; }
+  else if (draftDone()) {
+    // "draft complete" banner only bridges the gap between the draft and the first tee;
+    // once the tournament is underway (or done) the standings speak for themselves.
+    // NOTE (future multi-tournament mode): keep this logic — every new event starts
+    // back at setup -> draft -> complete, so the banner sequence is reused as-is.
+    const started = espn.eventStatus && espn.eventStatus !== "STATUS_SCHEDULED";
+    if (started) b.classList.add("hidden");
+    else { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); }
+    title = "🏆 The Open - 2026 Snake Draft";
+  }
   else {
     const o = onClockOwner();
     const i = currentPick();
