@@ -454,6 +454,7 @@ async function fetchScores(manual) {
       return {
         name: c.athlete?.displayName || "?",
         norm: normName(c.athlete?.displayName || ""),
+        espnId: c.athlete?.id != null ? String(c.athlete.id) : null,
         rounds,
         today,
         totalStrokes: Number(c.score?.value),
@@ -481,6 +482,67 @@ async function fetchScores(manual) {
   renderAdmin();
 }
 
+/* ---- hole-by-hole scorecard modal (display-only, fetched on demand) ---- */
+const scCache = {};
+const scUrl = id => "https://site.web.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard/" +
+  (S.state?.espnEventId || ESPN_EVENT_ID) + "/playersummary?region=us&lang=en&player=" + id;
+
+function openScorecard(id, name) {
+  $("scModal").classList.remove("hidden");
+  $("scTitle").textContent = name;
+  $("scTabs").innerHTML = "";
+  $("scBody").innerHTML = '<p class="muted">Loading scorecard&hellip;</p>';
+  const cached = scCache[id];
+  if (cached && Date.now() - cached.at < 120000) { renderScorecard(id); return; }
+  fetch(scUrl(id))
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(d => { scCache[id] = { at: Date.now(), rounds: d.rounds || [] }; renderScorecard(id); })
+    .catch(e => { $("scBody").innerHTML = `<p class="muted">Couldn't load scorecard (${esc(e.message)}).</p>`; });
+}
+
+function renderScorecard(id, sel) {
+  const data = scCache[id];
+  if (!data) return;
+  const rounds = data.rounds
+    .map((r, i) => ({ num: r.period || i + 1, holes: (r.linescores || []).filter(h => Number.isFinite(Number(h.value))) }))
+    .filter(r => r.holes.length);
+  if (!rounds.length) { $("scTabs").innerHTML = ""; $("scBody").innerHTML = '<p class="muted">No holes played yet.</p>'; return; }
+  const cur = (sel != null && rounds.find(r => r.num === sel)) || rounds[rounds.length - 1];
+  $("scTabs").innerHTML = rounds.map(r =>
+    `<button class="sc-tab${r.num === cur.num ? " active" : ""}" data-scround="${r.num}" data-scid="${esc(id)}">R${r.num}</button>`).join("");
+  const cls = h => {
+    const t = h?.scoreType?.name || "";
+    return /EAGLE|ALBATROSS/i.test(t) ? "sc-eagle"
+      : t === "BIRDIE" ? "sc-birdie"
+      : t === "BOGEY" ? "sc-bogey"
+      : /DOUBLE|TRIPLE|OTHER/i.test(t) ? "sc-double" : "";
+  };
+  const half = (from, label) => {
+    const cells = [];
+    for (let hole = from; hole < from + 9; hole++) cells.push(cur.holes.find(x => x.period === hole) || null);
+    if (!cells.some(Boolean)) return "";
+    const sum = k => cells.reduce((s, h) => s + (h ? Number(h[k]) || 0 : 0), 0);
+    return `<div class="table-wrap"><table class="sc-grid">` +
+      `<tr><th>Hole</th>${cells.map((_, i) => `<th class=num>${from + i}</th>`).join("")}<th class=num>${label}</th></tr>` +
+      `<tr><td class=muted>Par</td>${cells.map(h => `<td class=num>${h ? (h.par ?? "") : ""}</td>`).join("")}<td class=num>${sum("par") || ""}</td></tr>` +
+      `<tr><td class=muted>Score</td>${cells.map(h => `<td class="num ${cls(h)}">${h ? esc(h.displayValue ?? "") : ""}</td>`).join("")}<td class=num><b>${sum("value") || ""}</b></td></tr>` +
+      `</table></div>`;
+  };
+  $("scBody").innerHTML = half(1, "OUT") + half(10, "IN") +
+    `<p class="small sc-legend"><span class="sc-eagle">eagle</span><span class="sc-birdie">birdie</span><span class="sc-bogey">bogey</span><span class="sc-double">double+</span></p>`;
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest?.(".golfer-link");
+  if (el) openScorecard(el.dataset.espnid, el.dataset.gname);
+});
+$("scClose").addEventListener("click", () => $("scModal").classList.add("hidden"));
+$("scModal").addEventListener("click", e => { if (e.target === $("scModal")) $("scModal").classList.add("hidden"); });
+$("scTabs").addEventListener("click", e => {
+  const r = e.target.dataset?.scround;
+  if (r) renderScorecard(e.target.dataset.scid, Number(r));
+});
+
 let pollTimer = null;
 function maybeStartPolling() {
   if (draftDone() && !pollTimer) {
@@ -503,7 +565,7 @@ function golferScore(gid) {
   const target = ov.espnName ? normName(ov.espnName) : normName(g.name);
   const c = espn.byNorm[target];
   if (!c) return { matched: false };
-  const base = { matched: true, manual: false, out: c.out, pos: c.pos, detail: c.detail, espnName: c.name, state: c.state, thru: c.thru };
+  const base = { matched: true, manual: false, out: c.out, pos: c.pos, detail: c.detail, espnName: c.name, espnId: c.espnId, state: c.state, thru: c.thru };
   if (c.out) {
     let total = 0;
     for (let r = 1; r <= 4; r++) {
@@ -771,7 +833,8 @@ function renderStandings() {
         : sc.pending ? esc(sc.detail || "not started")
         : sc.out ? esc(sc.detail || "CUT")
         : `${esc(sc.pos || "")}${sc.state === "in" && sc.thru ? " · thru " + sc.thru : ""}`;
-      return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${esc(r.pick.name)}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
+      const nameCell = sc.espnId ? `<span class="golfer-link" data-espnid="${esc(sc.espnId)}" data-gname="${esc(r.pick.name)}">${esc(r.pick.name)}</span>` : esc(r.pick.name);
+      return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${nameCell}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
     }).join("");
     return `<div class="roster-card"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
   }).join("");
@@ -781,7 +844,7 @@ function renderStandings() {
   $("leaderboard").innerHTML = lb.length
     ? "<tr><th>Pos</th><th>Player</th><th class=num>To Par</th><th class=num>Today</th><th class=num>Thru</th><th class=num>R1</th><th class=num>R2</th><th class=num>R3</th><th class=num>R4</th><th class=num>Tot</th><th>Status</th></tr>" +
       lb.map(c =>
-        `<tr><td>${esc(c.pos)}</td><td>${esc(c.name)}</td><td class="num">${esc(c.toPar)}</td><td class="num">${esc(c.today ?? "")}</td><td class="num">${esc(c.displayThru)}</td>` +
+        `<tr><td>${esc(c.pos)}</td><td>${c.espnId ? `<span class="golfer-link" data-espnid="${esc(c.espnId)}" data-gname="${esc(c.name)}">${esc(c.name)}</span>` : esc(c.name)}</td><td class="num">${esc(c.toPar)}</td><td class="num">${esc(c.today ?? "")}</td><td class="num">${esc(c.displayThru)}</td>` +
         [1, 2, 3, 4].map(r => `<td class="num">${Number.isFinite(c.rounds[r]) ? c.rounds[r] : ""}</td>`).join("") +
         `<td class="num">${Number.isFinite(c.totalStrokes) ? c.totalStrokes : ""}</td><td class="${c.out ? "cut" : ""}">${esc(c.detail)}</td></tr>`
       ).join("")

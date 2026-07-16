@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 <header>
@@ -141,9 +141,17 @@
 
 <footer class="muted small">Live scores from ESPN &middot; polls every 3 min during the tournament &middot; missed cut = 80 for R3 &amp; R4</footer>
 
+<div id="scModal" class="sc-overlay hidden">
+  <div class="sc-box">
+    <div class="sc-head"><h3 id="scTitle"></h3><button id="scClose">✕</button></div>
+    <div id="scTabs" class="sc-tabs"></div>
+    <div id="scBody"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
