@@ -462,6 +462,7 @@ async function fetchScores(manual) {
         statusName,
         state,
         thru,
+        displayThru: started ? (c.status?.displayThru || (thru ? String(thru) : "")) : "",
         out: /CUT|WITHDRAW|DISQUAL/i.test(statusName),
         pos: c.status?.position?.displayName || "",
         detail: (/^\d{4}-\d{2}-\d{2}T/.test(c.status?.displayValue || "") ? c.status?.detail : c.status?.displayValue) || c.status?.detail || "",
@@ -778,9 +779,9 @@ function renderStandings() {
   // official leaderboard
   const lb = espn.competitors.slice().sort((a, b) => a.sortOrder - b.sortOrder);
   $("leaderboard").innerHTML = lb.length
-    ? "<tr><th>Pos</th><th>Player</th><th class=num>To Par</th><th class=num>Today</th><th class=num>R1</th><th class=num>R2</th><th class=num>R3</th><th class=num>R4</th><th class=num>Tot</th><th>Status</th></tr>" +
+    ? "<tr><th>Pos</th><th>Player</th><th class=num>To Par</th><th class=num>Today</th><th class=num>Thru</th><th class=num>R1</th><th class=num>R2</th><th class=num>R3</th><th class=num>R4</th><th class=num>Tot</th><th>Status</th></tr>" +
       lb.map(c =>
-        `<tr><td>${esc(c.pos)}</td><td>${esc(c.name)}</td><td class="num">${esc(c.toPar)}</td><td class="num">${esc(c.today ?? "")}</td>` +
+        `<tr><td>${esc(c.pos)}</td><td>${esc(c.name)}</td><td class="num">${esc(c.toPar)}</td><td class="num">${esc(c.today ?? "")}</td><td class="num">${esc(c.displayThru)}</td>` +
         [1, 2, 3, 4].map(r => `<td class="num">${Number.isFinite(c.rounds[r]) ? c.rounds[r] : ""}</td>`).join("") +
         `<td class="num">${Number.isFinite(c.totalStrokes) ? c.totalStrokes : ""}</td><td class="${c.out ? "cut" : ""}">${esc(c.detail)}</td></tr>`
       ).join("")
