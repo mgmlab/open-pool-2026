@@ -547,8 +547,28 @@ function renderScorecard(id, sel) {
 
 document.addEventListener("click", e => {
   const el = e.target.closest?.(".golfer-link");
-  if (el) openScorecard(el.dataset.espnid, el.dataset.gname);
+  if (el) { openScorecard(el.dataset.espnid, el.dataset.gname); return; }
+  const tj = e.target.closest?.("[data-teamjump]");
+  if (tj) {
+    const card = [...document.querySelectorAll(".roster-card")].find(c => c.dataset.owner === tj.dataset.teamjump);
+    if (card) {
+      scrollToEl(card);
+      card.classList.add("flash");
+      setTimeout(() => card.classList.remove("flash"), 1800);
+    }
+    return;
+  }
+  if (e.target.closest?.("#lbJump")) scrollToEl($("lbPanel"));
 });
+
+// absolute-position scroll (offset clears the sticky banner/tabs on mobile);
+// falls back to an instant jump if smooth scrolling is unsupported or suppressed
+function scrollToEl(el) {
+  const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - 90);
+  const from = window.scrollY;
+  try { window.scrollTo({ top, behavior: "smooth" }); } catch (e) { window.scrollTo(0, top); }
+  setTimeout(() => { if (Math.abs(window.scrollY - from) < 5 && Math.abs(top - from) > 50) window.scrollTo(0, top); }, 500);
+}
 $("scClose").addEventListener("click", () => $("scModal").classList.add("hidden"));
 $("scModal").addEventListener("click", e => { if (e.target === $("scModal")) $("scModal").classList.add("hidden"); });
 $("scTabs").addEventListener("click", e => {
@@ -815,7 +835,7 @@ function renderStandings() {
   const topRows = teams.slice().sort((a, b) => (a.topSum ?? 1e9) - (b.topSum ?? 1e9));
   $("topTable").innerHTML = `<tr><th>#</th><th>Team</th><th class=num>Top ${X} To Par</th><th class=num>Counting</th></tr>` +
     topRows.map((t, i) =>
-      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td class="num">${fmtToPar(t.topSum)}</td>` +
+      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><span class="team-link" data-teamjump="${esc(t.owner)}"><b>${esc(t.owner)}</b></span></td><td class="num">${fmtToPar(t.topSum)}</td>` +
       `<td class="num">${t.counted}/${X}${t.rows.length >= X && t.counted < X ? " ⚠" : ""}</td></tr>`
     ).join("");
 
@@ -858,7 +878,7 @@ function renderStandings() {
       const nameCell = sc.espnId ? `<span class="golfer-link" data-espnid="${esc(sc.espnId)}" data-gname="${esc(r.pick.name)}">${esc(r.pick.name)}</span>` : esc(r.pick.name);
       return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${nameCell}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
     }).join("");
-    return `<div class="roster-card"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
+    return `<div class="roster-card" data-owner="${esc(t.owner)}"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
   }).join("");
 
   // official leaderboard

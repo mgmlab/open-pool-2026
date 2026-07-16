@@ -161,6 +161,13 @@ td.manual { color: #6ab0ff; }
 
 .golfer-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .golfer-link:hover { color: var(--green); }
+.team-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.team-link:hover { color: var(--green); }
+.jump-link { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 0.9rem; text-decoration: underline dotted; text-underline-offset: 3px; white-space: nowrap; }
+.jump-link:hover { color: var(--green); }
+.roster-card { scroll-margin-top: 90px; }
+.roster-card.flash { outline: 2px solid var(--gold); box-shadow: 0 0 16px rgba(245, 197, 24, 0.35); }
+#lbPanel { scroll-margin-top: 90px; }
 .sc-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 12px; }
 .sc-box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; max-width: 720px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .sc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
