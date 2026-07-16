@@ -810,7 +810,7 @@ function renderStandings() {
   const bestRows = teams.slice().sort((a, b) => (a.best ? a.best.sc.total : 1e9) - (b.best ? b.best.sc.total : 1e9));
   $("bestTable").innerHTML = "<tr><th>#</th><th>Team</th><th>Best Golfer</th><th class=num>To Par</th><th>Pos</th></tr>" +
     bestRows.map((t, i) =>
-      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td>${t.best ? esc(t.best.pick.name) : "—"}</td>` +
+      `<tr class="rank-${i + 1}"><td>${i + 1}</td><td><b>${esc(t.owner)}</b></td><td>${t.best ? (t.best.sc.espnId ? `<span class="golfer-link" data-espnid="${esc(t.best.sc.espnId)}" data-gname="${esc(t.best.pick.name)}">${esc(t.best.pick.name)}</span>` : esc(t.best.pick.name)) : "—"}</td>` +
       `<td class="num">${t.best ? fmtToPar(t.best.sc.total) : "—"}</td><td>${t.best ? esc(t.best.sc.pos || "") : ""}</td></tr>`
     ).join("");
 
