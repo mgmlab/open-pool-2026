@@ -25,14 +25,14 @@
 </div>
 
 <nav id="tabs">
-  <button data-tab="draft" class="tab active">Draft</button>
-  <button data-tab="standings" class="tab">Standings</button>
+  <button data-tab="standings" class="tab active">Standings</button>
+  <button data-tab="draft" class="tab">Draft</button>
   <button data-tab="admin" class="tab">Admin</button>
 </nav>
 
 <main>
   <!-- ============ DRAFT TAB ============ -->
-  <section id="tab-draft">
+  <section id="tab-draft" class="hidden">
     <div class="panel hidden" id="recapPanel">
       <h2>📋 Draft Recap</h2>
       <p class="muted small" id="recapIntro"></p>
@@ -58,7 +58,7 @@
   </section>
 
   <!-- ============ STANDINGS TAB ============ -->
-  <section id="tab-standings" class="hidden">
+  <section id="tab-standings">
     <div class="standings-meta">
       <span id="scoreStatus" class="muted"></span>
       <button id="refreshScores">Refresh now</button>
