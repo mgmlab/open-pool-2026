@@ -429,22 +429,39 @@ async function fetchScores(manual) {
     espn.eventStatus = ev?.status?.type?.name || null;
     espn.par = Number(ev?.courses?.[0]?.shotsToPar) || espn.par;
     espn.competitors = (comp?.competitors || []).map(c => {
+      const state = c.status?.type?.state || "";
+      const thru = Number(c.status?.thru) || 0;
+      const curPeriod = Number(c.status?.period) || 0;
+      // linescores[period].value is a RUNNING stroke count while that round is in
+      // progress — only record it as a round once the round is actually finished,
+      // otherwise partial strokes leak into round math (and the R2 payout freeze)
       const rounds = {};
+      let today = null; // in-progress round to par, ESPN's "Today" column (e.g. "-1")
       for (const ls of c.linescores || []) {
         const v = Number(ls.value);
-        if (Number.isFinite(v) && ls.period >= 1 && ls.period <= 4) rounds[ls.period] = v;
+        if (!Number.isFinite(v) || ls.period < 1 || ls.period > 4) continue;
+        if (ls.period < curPeriod || (ls.period === curPeriod && (thru >= 18 || state === "post"))) rounds[ls.period] = v;
+        else if (ls.period === curPeriod) today = ls.displayValue ?? null;
       }
       const statusName = c.status?.type?.name || "";
+      // mid-round, score.displayValue lags — the live overall to-par is the scoreToPar statistic
+      const stat = (c.statistics || []).find(s => s.name === "scoreToPar");
+      const started = state === "in" || state === "post" || thru > 0 || Object.keys(rounds).length > 0;
+      const statVal = Number(stat?.value);
+      const liveToPar = !started ? null
+        : Number.isFinite(statVal) ? statVal
+        : parseToPar(stat?.displayValue ?? c.score?.displayValue);
       return {
         name: c.athlete?.displayName || "?",
         norm: normName(c.athlete?.displayName || ""),
         rounds,
+        today,
         totalStrokes: Number(c.score?.value),
-        toPar: c.score?.displayValue ?? "",
-        liveToPar: parseToPar(c.score?.displayValue), // overall to par, live mid-round; null before first tee shot
+        toPar: started ? (stat?.displayValue ?? c.score?.displayValue ?? "") : "-",
+        liveToPar, // overall to par, live mid-round; null before first tee shot
         statusName,
-        state: c.status?.type?.state || "",
-        thru: Number(c.status?.thru) || 0,
+        state,
+        thru,
         out: /CUT|WITHDRAW|DISQUAL/i.test(statusName),
         pos: c.status?.position?.displayName || "",
         detail: (/^\d{4}-\d{2}-\d{2}T/.test(c.status?.displayValue || "") ? c.status?.detail : c.status?.displayValue) || c.status?.detail || "",
@@ -761,9 +778,9 @@ function renderStandings() {
   // official leaderboard
   const lb = espn.competitors.slice().sort((a, b) => a.sortOrder - b.sortOrder);
   $("leaderboard").innerHTML = lb.length
-    ? "<tr><th>Pos</th><th>Player</th><th class=num>To Par</th><th class=num>R1</th><th class=num>R2</th><th class=num>R3</th><th class=num>R4</th><th class=num>Tot</th><th>Status</th></tr>" +
+    ? "<tr><th>Pos</th><th>Player</th><th class=num>To Par</th><th class=num>Today</th><th class=num>R1</th><th class=num>R2</th><th class=num>R3</th><th class=num>R4</th><th class=num>Tot</th><th>Status</th></tr>" +
       lb.map(c =>
-        `<tr><td>${esc(c.pos)}</td><td>${esc(c.name)}</td><td class="num">${esc(c.toPar)}</td>` +
+        `<tr><td>${esc(c.pos)}</td><td>${esc(c.name)}</td><td class="num">${esc(c.toPar)}</td><td class="num">${esc(c.today ?? "")}</td>` +
         [1, 2, 3, 4].map(r => `<td class="num">${Number.isFinite(c.rounds[r]) ? c.rounds[r] : ""}</td>`).join("") +
         `<td class="num">${Number.isFinite(c.totalStrokes) ? c.totalStrokes : ""}</td><td class="${c.out ? "cut" : ""}">${esc(c.detail)}</td></tr>`
       ).join("")
