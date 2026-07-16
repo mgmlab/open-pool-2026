@@ -978,6 +978,7 @@ function renderAdmin() {
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
   for (const t of ["draft", "standings", "admin"]) $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
+  window.scrollTo(0, 0); // switching tabs always starts at the top of the page
   if ((btn.dataset.tab === "standings" || btn.dataset.tab === "admin") && Date.now() - espn.fetchedAt > POLL_MS) fetchScores(false);
 }));
 
