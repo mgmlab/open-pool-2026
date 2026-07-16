@@ -488,9 +488,21 @@ const scCache = {};
 const scUrl = id => "https://site.web.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard/" +
   (S.state?.espnEventId || ESPN_EVENT_ID) + "/playersummary?region=us&lang=en&player=" + id;
 
+// which pool team drafted this golfer (matches the same way scoring does, overrides included)
+function teamOfGolfer(gname) {
+  const target = normName(gname);
+  for (const p of Object.values(S.picks || {})) {
+    const ov = (S.overrides || {})[p.gid] || {};
+    if (normName(p.name) === target || (ov.espnName && normName(ov.espnName) === target)) return p.owner;
+  }
+  return null;
+}
+
 function openScorecard(id, name) {
   $("scModal").classList.remove("hidden");
   $("scTitle").textContent = name;
+  const owner = teamOfGolfer(name);
+  $("scTeam").textContent = owner ? "Team " + owner : "Undrafted";
   $("scTabs").innerHTML = "";
   $("scBody").innerHTML = '<p class="muted">Loading scorecard&hellip;</p>';
   const cached = scCache[id];
@@ -613,12 +625,12 @@ function topAt(thru) {
   }).sort((a, b) => (a.sum ?? 1e9) - (b.sum ?? 1e9));
 }
 
-// all teams tied for the lead of a sorted standings list
+// all teams tied for the lead of a sorted standings list (names as an array, one per line in the payout cell)
 function leadersOf(rows, key) {
   const first = rows[0];
   if (!first || first[key] == null) return null;
   const names = rows.filter(r => r[key] === first[key]).map(r => r.owner);
-  return { names: names.join(" & "), value: first[key], tie: names.length > 1 };
+  return { names, value: first[key], tie: names.length > 1 };
 }
 
 function computeStandings() {
@@ -821,9 +833,9 @@ function renderStandings() {
   const r2Lead = r2done ? leadersOf(topAt(2), "sum") : leadersOf(liveTop, "sum");
   const ovLead = leadersOf(liveTop, "sum");
   const bgFirst = bestRows[0] && bestRows[0].best ? bestRows.filter(t => t.best && t.best.sc.total === bestRows[0].best.sc.total) : [];
-  const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`).join(" & "), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
+  const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
   const payCell = (lead, done) => lead
-    ? `<td><b>${esc(lead.names)}</b> ${fmtToPar(lead.value)}${lead.tie ? " — tie" : ""}</td><td>${done ? '<span class="counted">🏆 WINNER — pays out</span>' : '<span class="muted">current leader</span>'}</td>`
+    ? `<td class="pay-lead">${lead.names.map(n => `<div>${esc(n)}</div>`).join("")}<div class="muted small">${fmtToPar(lead.value)}${lead.tie ? " — tie" : ""}</div></td><td>${done ? '<span class="counted">🏆 WINNER — pays out</span>' : '<span class="muted">current leader</span>'}</td>`
     : `<td class="muted">—</td><td class="muted">waiting on scores</td>`;
   $("payoutTable").innerHTML =
     `<tr><th>Prize</th><th>Leader</th><th>Status</th><th>How it's won</th></tr>` +
