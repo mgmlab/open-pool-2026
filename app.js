@@ -600,11 +600,13 @@ function golferScore(gid) {
   if (!c) return { matched: false };
   const base = { matched: true, manual: false, out: c.out, pos: c.pos, detail: c.detail, espnName: c.name, espnId: c.espnId, state: c.state, thru: c.thru };
   if (c.out) {
-    let total = 0;
+    let total = 0, actual = 0;
     for (let r = 1; r <= 4; r++) {
-      total += Number.isFinite(c.rounds[r]) ? c.rounds[r] - espn.par : CUT_SCORE - espn.par;
+      if (Number.isFinite(c.rounds[r])) { total += c.rounds[r] - espn.par; actual += c.rounds[r] - espn.par; }
+      else total += CUT_SCORE - espn.par;
     }
-    return { ...base, total, penalized: true };
+    if (c.liveToPar != null) actual = c.liveToPar; // ESPN's own to-par for the rounds actually played
+    return { ...base, total, actual, penalized: true };
   }
   if (c.liveToPar == null) return { ...base, pending: true, total: null };
   return { ...base, total: c.liveToPar };
@@ -873,7 +875,7 @@ function renderStandings() {
       const note = sc.manual ? "manual"
         : !sc.matched ? "no match"
         : sc.pending ? esc(sc.detail || "not started")
-        : sc.out ? esc(sc.detail || "CUT")
+        : sc.out ? `${esc(sc.detail || "CUT")} · shot ${fmtToPar(sc.actual)}, +${CUT_SCORE - espn.par}/rd penalty`
         : `${esc(sc.pos || "")}${sc.state === "in" && sc.thru ? " · thru " + sc.thru : ""}`;
       const nameCell = sc.espnId ? `<span class="golfer-link" data-espnid="${esc(sc.espnId)}" data-gname="${esc(r.pick.name)}">${esc(r.pick.name)}</span>` : esc(r.pick.name);
       return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${nameCell}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
