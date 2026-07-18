@@ -552,13 +552,12 @@ document.addEventListener("click", e => {
   if (tj) {
     const card = [...document.querySelectorAll(".roster-card")].find(c => c.dataset.owner === tj.dataset.teamjump);
     if (card) {
+      showStandingsSub("rosters"); // roster cards live on their own sub-tab now
       scrollToEl(card);
       card.classList.add("flash");
       setTimeout(() => card.classList.remove("flash"), 1800);
     }
-    return;
   }
-  if (e.target.closest?.("#lbJump")) scrollToEl($("lbPanel"));
 });
 
 // absolute-position scroll (offset clears the sticky banner/tabs on mobile);
@@ -817,11 +816,6 @@ function renderQueue() {
 }
 
 function renderStandings() {
-  const st = $("scoreStatus");
-  if (espn.error) st.textContent = `⚠ last fetch failed (${espn.error})`;
-  else if (!espn.fetchedAt) st.textContent = draftDone() ? "Loading scores…" : "Scores start once the draft is complete (or press Refresh).";
-  else st.textContent = `${espn.eventName || "Tournament"} · ${espn.competitors.length} players · updated ${new Date(espn.fetchedAt).toLocaleTimeString()}${espn.eventStatus === "STATUS_SCHEDULED" ? " · tournament not started" : ""}`;
-
   const { teams, unmatched } = computeStandings();
 
   const warn = $("unmatchedWarn");
@@ -984,9 +978,18 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
   if ((btn.dataset.tab === "standings" || btn.dataset.tab === "admin") && Date.now() - espn.fetchedAt > POLL_MS) fetchScores(false);
 }));
 
-document.querySelectorAll(".subtab").forEach(btn => btn.addEventListener("click", () => {
-  document.querySelectorAll(".subtab").forEach(b => b.classList.toggle("active", b === btn));
+document.querySelectorAll("#adminTabs .subtab").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("#adminTabs .subtab").forEach(b => b.classList.toggle("active", b === btn));
   for (const t of ["setup", "control", "usage", "fixes"]) $("admin-" + t).classList.toggle("hidden", btn.dataset.subtab !== t);
+}));
+
+function showStandingsSub(name) {
+  document.querySelectorAll("#standingsTabs .subtab").forEach(b => b.classList.toggle("active", b.dataset.ssub === name));
+  for (const t of ["main", "rosters", "lb"]) $("ssub-" + t).classList.toggle("hidden", name !== t);
+}
+document.querySelectorAll("#standingsTabs .subtab").forEach(btn => btn.addEventListener("click", () => {
+  showStandingsSub(btn.dataset.ssub);
+  window.scrollTo(0, 0);
 }));
 
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
@@ -1014,7 +1017,6 @@ $("queueList").addEventListener("click", e => {
   if (up != null) { const i = +up; if (i > 0) { [q[i - 1], q[i]] = [q[i], q[i - 1]]; writeQueue(q); } }
   else if (del != null) { q.splice(+del, 1); writeQueue(q); }
 });
-$("refreshScores").addEventListener("click", () => fetchScores(true));
 
 $("adminUnlock").addEventListener("click", adminUnlock);
 $("adminPass").addEventListener("keydown", e => { if (e.key === "Enter") adminUnlock(); });

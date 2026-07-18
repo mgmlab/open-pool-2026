@@ -144,7 +144,6 @@ td.manual { color: #6ab0ff; }
   background: #3a2a10; border: 1px solid #7a5b00; color: #ffd97a;
   padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem;
 }
-.standings-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 
 .roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .roster-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
@@ -171,8 +170,6 @@ td.manual { color: #6ab0ff; }
 .golfer-link:hover { color: var(--green); }
 .team-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .team-link:hover { color: var(--green); }
-.jump-link { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 0.9rem; text-decoration: underline dotted; text-underline-offset: 3px; white-space: nowrap; }
-.jump-link:hover { color: var(--green); }
 .roster-card { scroll-margin-top: 90px; }
 .roster-card.flash { outline: 2px solid var(--gold); box-shadow: 0 0 16px rgba(245, 197, 24, 0.35); }
 #lbPanel { scroll-margin-top: 90px; }
@@ -223,7 +220,6 @@ footer { margin-top: 24px; text-align: center; }
   #board td { min-width: 78px; padding: 4px 5px; }
   #bestTable td, #avgTable td, .roster-card td { white-space: normal; }
   .roster-grid { grid-template-columns: 1fr; }
-  .standings-meta { flex-wrap: wrap; gap: 8px; }
   .pick-log { max-height: 140px; }
   #fixTable input { width: 100px; }
 }

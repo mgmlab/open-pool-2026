@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 <header>
@@ -59,35 +59,41 @@
 
   <!-- ============ STANDINGS TAB ============ -->
   <section id="tab-standings">
-    <div class="standings-meta">
-      <span id="scoreStatus" class="muted"></span>
-      <button id="refreshScores">Refresh now</button>
-      <span id="lbJump" class="jump-link">Leaderboard ↓</span>
-    </div>
     <div id="unmatchedWarn" class="warn hidden"></div>
-    <div class="panel" id="payoutPanel">
-      <h2>💰 Payouts</h2>
-      <div class="table-wrap"><table id="payoutTable"></table></div>
-    </div>
-    <div class="standings-layout">
-      <div class="panel grow">
-        <h2 id="topTitle">📊 Top 4 Combined</h2>
-        <p class="muted small" id="topDesc"></p>
-        <div class="table-wrap"><table id="topTable"></table></div>
+    <nav id="standingsTabs" class="subtabs">
+      <button data-ssub="main" class="subtab active">Standings</button>
+      <button data-ssub="rosters" class="subtab">Rosters &amp; Scores</button>
+      <button data-ssub="lb" class="subtab">Leaderboard</button>
+    </nav>
+    <div id="ssub-main">
+      <div class="panel" id="payoutPanel">
+        <h2>💰 Payouts</h2>
+        <div class="table-wrap"><table id="payoutTable"></table></div>
       </div>
-      <div class="panel grow">
-        <h2>🏆 Best Golfer</h2>
-        <p class="muted small">Teams ranked by their single best golfer's total score</p>
-        <div class="table-wrap"><table id="bestTable"></table></div>
+      <div class="standings-layout">
+        <div class="panel grow">
+          <h2 id="topTitle">📊 Top 4 Combined</h2>
+          <p class="muted small" id="topDesc"></p>
+          <div class="table-wrap"><table id="topTable"></table></div>
+        </div>
+        <div class="panel grow">
+          <h2>🏆 Best Golfer</h2>
+          <p class="muted small">Teams ranked by their single best golfer's total score</p>
+          <div class="table-wrap"><table id="bestTable"></table></div>
+        </div>
       </div>
     </div>
-    <div class="panel">
-      <h2>Team Rosters &amp; Scores</h2>
-      <div id="rosterScores" class="roster-grid"></div>
+    <div id="ssub-rosters" class="hidden">
+      <div class="panel">
+        <h2>Team Rosters &amp; Scores</h2>
+        <div id="rosterScores" class="roster-grid"></div>
+      </div>
     </div>
-    <div class="panel" id="lbPanel">
-      <h2>Official Tournament Leaderboard</h2>
-      <div class="table-wrap"><table id="leaderboard"></table></div>
+    <div id="ssub-lb" class="hidden">
+      <div class="panel" id="lbPanel">
+        <h2>Official Tournament Leaderboard</h2>
+        <div class="table-wrap"><table id="leaderboard"></table></div>
+      </div>
     </div>
   </section>
 
@@ -159,6 +165,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=26"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>
