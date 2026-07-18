@@ -902,7 +902,7 @@ function renderStandings() {
       }
       const t = PRIZE_TYPES[p.type] || { emoji: "💰", how: () => "" };
       const amount = p.amount ? `<div class="muted small">${esc(String(p.amount))}</div>` : "";
-      return `<tr><td><b>${t.emoji} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${t.how(X, p.n)}</td></tr>`;
+      return `<tr><td><b>${esc(p.emoji || t.emoji)} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${t.how(X, p.n)}</td></tr>`;
     }).join("");
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
@@ -952,7 +952,7 @@ function renderAdmin() {
       const t = PRIZE_TYPES[p.type] || { name: p.type };
       const meta = `${t.name}${p.type === "roundLeader" ? " (R" + (Number(p.n) || 2) + ")" : ""}`;
       return `<div class="queue-row"><span class="qnum">${i + 1}.</span>` +
-        `<span class="name">${esc(p.label || t.name)}${p.amount ? ` <span class="muted small">${esc(String(p.amount))}</span>` : ""} <span class="muted small">— ${esc(meta)}</span></span>` +
+        `<span class="name">${esc(p.emoji || PRIZE_TYPES[p.type]?.emoji || "")} ${esc(p.label || t.name)}${p.amount ? ` <span class="muted small">${esc(String(p.amount))}</span>` : ""} <span class="muted small">— ${esc(meta)}</span></span>` +
         `<button data-pzup="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-pzdel="${i}">✕</button></div>`;
     }).join("") + (customPayouts() ? "" : `<div class="muted small" style="padding:4px 0">These are the defaults — add, remove, or reorder to customize.</div>`);
   }
@@ -1094,8 +1094,10 @@ $("pzAddBtn").addEventListener("click", () => {
   if (type === "roundLeader") prize.n = n;
   const amount = $("pzAmount").value.trim();
   if (amount) prize.amount = amount;
+  const emoji = $("pzEmoji").value.trim();
+  if (emoji) prize.emoji = emoji;
   writePayouts([...activePayouts(), prize]);
-  $("pzLabel").value = ""; $("pzAmount").value = "";
+  $("pzLabel").value = ""; $("pzAmount").value = ""; $("pzEmoji").value = "";
 });
 $("payoutList").addEventListener("click", e => {
   const up = e.target.dataset?.pzup, del = e.target.dataset?.pzdel;
