@@ -107,13 +107,13 @@
     </div>
     <div id="adminPanel" class="hidden">
       <nav id="adminTabs" class="subtabs">
-        <button data-subtab="setup" class="subtab active">Draft Setup</button>
+        <button data-subtab="settings" class="subtab active">Settings</button>
+        <button data-subtab="setup" class="subtab">Draft Setup</button>
         <button data-subtab="control" class="subtab">Draft Control</button>
         <button data-subtab="usage" class="subtab">Usage</button>
         <button data-subtab="fixes" class="subtab">Scoring Fixes</button>
-        <button data-subtab="settings" class="subtab">Settings</button>
       </nav>
-      <div class="panel" id="admin-setup">
+      <div class="panel hidden" id="admin-setup">
         <h2>Draft Setup</h2>
         <h3>League setup</h3>
         <p class="muted small">Team names, one per line. Changing teams resets the draft order and clears seats of removed teams.</p>
@@ -149,7 +149,7 @@
         <p class="muted small">Fix golfers that don't match ESPN's leaderboard: map to the ESPN name, or set a manual total-score override.</p>
         <div class="table-wrap"><table id="fixTable"></table></div>
       </div>
-      <div class="panel hidden" id="admin-settings">
+      <div class="panel" id="admin-settings">
         <h2>Settings</h2>
         <h3>Pool name</h3>
         <p class="muted small">Shown in the page header and the browser tab. Leave blank for the default.</p>
