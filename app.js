@@ -517,12 +517,12 @@ function renderScorecard(id, sel) {
   const data = scCache[id];
   if (!data) return;
   const rounds = data.rounds
-    .map((r, i) => ({ num: r.period || i + 1, holes: (r.linescores || []).filter(h => Number.isFinite(Number(h.value))) }))
+    .map((r, i) => ({ num: r.period || i + 1, disp: r.displayValue || "", holes: (r.linescores || []).filter(h => Number.isFinite(Number(h.value))) }))
     .filter(r => r.holes.length);
   if (!rounds.length) { $("scTabs").innerHTML = ""; $("scBody").innerHTML = '<p class="muted">No holes played yet.</p>'; return; }
   const cur = (sel != null && rounds.find(r => r.num === sel)) || rounds[rounds.length - 1];
   $("scTabs").innerHTML = rounds.map(r =>
-    `<button class="sc-tab${r.num === cur.num ? " active" : ""}" data-scround="${r.num}" data-scid="${esc(id)}">R${r.num}</button>`).join("");
+    `<button class="sc-tab${r.num === cur.num ? " active" : ""}" data-scround="${r.num}" data-scid="${esc(id)}">R${r.num}${r.disp ? ` · ${esc(r.disp)}` : ""}</button>`).join("");
   const cls = h => {
     const t = h?.scoreType?.name || "";
     return /EAGLE|ALBATROSS/i.test(t) ? "sc-eagle"
