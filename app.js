@@ -982,6 +982,11 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
   if ((btn.dataset.tab === "standings" || btn.dataset.tab === "admin") && Date.now() - espn.fetchedAt > POLL_MS) fetchScores(false);
 }));
 
+document.querySelectorAll(".subtab").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".subtab").forEach(b => b.classList.toggle("active", b === btn));
+  for (const t of ["setup", "control", "usage", "fixes"]) $("admin-" + t).classList.toggle("hidden", btn.dataset.subtab !== t);
+}));
+
 $("claimBtn").addEventListener("click", () => claimSeat($("seatSelect").value));
 $("autodraftChk").addEventListener("change", async e => {
   if (!me.owner) return;

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 <header>
@@ -100,7 +100,13 @@
       <div id="adminErr" class="warn hidden"></div>
     </div>
     <div id="adminPanel" class="hidden">
-      <div class="panel">
+      <nav id="adminTabs" class="subtabs">
+        <button data-subtab="setup" class="subtab active">Draft Setup</button>
+        <button data-subtab="control" class="subtab">Draft Control</button>
+        <button data-subtab="usage" class="subtab">Usage</button>
+        <button data-subtab="fixes" class="subtab">Scoring Fixes</button>
+      </nav>
+      <div class="panel" id="admin-setup">
         <h2>Draft Setup</h2>
         <h3>League setup</h3>
         <p class="muted small">Team names, one per line. Changing teams resets the draft order and clears seats of removed teams.</p>
@@ -116,7 +122,7 @@
         <button id="saveField">Save field</button>
         <span id="fieldInfo" class="muted"></span>
       </div>
-      <div class="panel">
+      <div class="panel hidden" id="admin-control">
         <h2>Draft Control</h2>
         <div class="btn-row">
           <button id="startDraft" class="primary">Start draft</button>
@@ -127,11 +133,11 @@
         <h3>Seats</h3>
         <div id="seatAdmin"></div>
       </div>
-      <div class="panel">
+      <div class="panel hidden" id="admin-usage">
         <h2>Usage</h2>
         <div id="usageBox" class="muted small">Waiting for stats&hellip; (requires the updated database rules)</div>
       </div>
-      <div class="panel">
+      <div class="panel hidden" id="admin-fixes">
         <h2>Scoring Fixes</h2>
         <p class="muted small">Fix golfers that don't match ESPN's leaderboard: map to the ESPN name, or set a manual total-score override.</p>
         <div class="table-wrap"><table id="fixTable"></table></div>
@@ -153,6 +159,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>

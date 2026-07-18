@@ -74,6 +74,13 @@ nav#tabs { display: flex; gap: 6px; margin: 8px 0 16px; border-bottom: 1px solid
   margin-bottom: 16px;
 }
 .panel.narrow { max-width: 420px; }
+.subtabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+.subtab {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px 8px 0 0;
+  color: var(--muted); padding: 8px 14px; font-size: 0.9rem; border-bottom: none;
+}
+.subtab.active { color: var(--text); background: var(--panel2); border-color: var(--green); font-weight: 600; }
+.subtab:hover { color: var(--text); }
 .grow { flex: 1; min-width: 0; }
 .draft-layout, .standings-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 16px; }
 .draft-layout > .panel, .standings-layout > .panel { margin-bottom: 0; }
