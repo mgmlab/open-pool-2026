@@ -440,7 +440,9 @@ async function fetchScores(manual) {
       let today = null; // in-progress round to par, ESPN's "Today" column (e.g. "-1")
       for (const ls of c.linescores || []) {
         const v = Number(ls.value);
-        if (!Number.isFinite(v) || ls.period < 1 || ls.period > 4) continue;
+        // v >= 18: ESPN emits phantom value-0 linescores for rounds a CUT player never
+        // played — a real 18-hole round can't be under 18 strokes, so ignore those
+        if (!Number.isFinite(v) || v < 18 || ls.period < 1 || ls.period > 4) continue;
         if (ls.period < curPeriod || (ls.period === curPeriod && (thru >= 18 || state === "post"))) rounds[ls.period] = v;
         else if (ls.period === curPeriod) today = ls.displayValue ?? null;
       }
