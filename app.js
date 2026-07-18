@@ -660,7 +660,7 @@ const PRIZE_TYPES = {
   roundLeader: { emoji: "🥈", name: "Leader after round N", how: (X, n) => `Top ${X} Combined leader at the end of Round ${Math.min(4, Math.max(1, Number(n) || 2))}` },
   overall: { emoji: "🏆", name: "Overall winner", how: X => `Top ${X} Combined at the end of the tournament` },
   bestGolfer: { emoji: "⭐", name: "Best golfer", how: () => "Lowest single golfer score at the end of the tournament" },
-  lastPlace: { emoji: "🥄", name: "Last place", how: X => `Highest Top ${X} Combined at the end of the tournament` }
+  lastPlace: { emoji: "🥄", name: "Last place", how: X => `Worst Top ${X} Combined at the end of the tournament` }
 };
 const DEFAULT_PAYOUTS = [
   { type: "roundLeader", n: 2, label: "Round 2 Payout" },
@@ -902,7 +902,7 @@ function renderStandings() {
       }
       const t = PRIZE_TYPES[p.type] || { emoji: "💰", how: () => "" };
       const amount = p.amount ? `<div class="muted small">${esc(String(p.amount))}</div>` : "";
-      return `<tr><td><b>${esc(p.emoji || t.emoji)} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${t.how(X, p.n)}</td></tr>`;
+      return `<tr><td><b>${esc(p.emoji || t.emoji)} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${p.how ? esc(p.how) : t.how(X, p.n)}</td></tr>`;
     }).join("");
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
@@ -1096,8 +1096,10 @@ $("pzAddBtn").addEventListener("click", () => {
   if (amount) prize.amount = amount;
   const emoji = $("pzEmoji").value.trim();
   if (emoji) prize.emoji = emoji;
+  const how = $("pzHow").value.trim();
+  if (how) prize.how = how;
   writePayouts([...activePayouts(), prize]);
-  $("pzLabel").value = ""; $("pzAmount").value = ""; $("pzEmoji").value = "";
+  $("pzLabel").value = ""; $("pzAmount").value = ""; $("pzEmoji").value = ""; $("pzHow").value = "";
 });
 $("payoutList").addEventListener("click", e => {
   const up = e.target.dataset?.pzup, del = e.target.dataset?.pzdel;
