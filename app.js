@@ -871,11 +871,11 @@ function renderStandings() {
       const sc = r.sc;
       const cls = sc.manual ? "manual" : (sc.out ? "cut" : "");
       const isCounted = t.countedGids.has(r.pick.gid);
-      const total = sc.matched ? fmtToPar(sc.total) : "—";
+      const total = sc.matched ? (sc.out ? "CUT" : fmtToPar(sc.total)) : "—";
       const note = sc.manual ? "manual"
         : !sc.matched ? "no match"
         : sc.pending ? esc(sc.detail || "not started")
-        : sc.out ? `${esc(sc.detail || "CUT")} · shot ${fmtToPar(sc.actual)}, +${CUT_SCORE - espn.par}/rd penalty`
+        : sc.out ? `shot ${fmtToPar(sc.actual)}`
         : `${esc(sc.pos || "")}${sc.state === "in" && sc.thru ? " · thru " + sc.thru : ""}`;
       const nameCell = sc.espnId ? `<span class="golfer-link" data-espnid="${esc(sc.espnId)}" data-gname="${esc(r.pick.name)}">${esc(r.pick.name)}</span>` : esc(r.pick.name);
       return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${nameCell}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
