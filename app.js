@@ -522,7 +522,7 @@ function renderScorecard(id, sel) {
   if (!rounds.length) { $("scTabs").innerHTML = ""; $("scBody").innerHTML = '<p class="muted">No holes played yet.</p>'; return; }
   const cur = (sel != null && rounds.find(r => r.num === sel)) || rounds[rounds.length - 1];
   $("scTabs").innerHTML = rounds.map(r =>
-    `<button class="sc-tab${r.num === cur.num ? " active" : ""}" data-scround="${r.num}" data-scid="${esc(id)}">R${r.num}${r.disp ? ` · ${esc(r.disp)}` : ""}</button>`).join("");
+    `<button class="sc-tab${r.num === cur.num ? " active" : ""}" data-scround="${r.num}" data-scid="${esc(id)}">R${r.num}</button>`).join("");
   const cls = h => {
     const t = h?.scoreType?.name || "";
     return /EAGLE|ALBATROSS/i.test(t) ? "sc-eagle"
@@ -541,7 +541,12 @@ function renderScorecard(id, sel) {
       `<tr><td class=muted>Score</td>${cells.map(h => `<td class="num ${cls(h)}">${h ? esc(h.displayValue ?? "") : ""}</td>`).join("")}<td class=num><b>${sum("value") || ""}</b></td></tr>` +
       `</table></div>`;
   };
+  const strokes = cur.holes.reduce((s, h) => s + (Number(h.value) || 0), 0);
+  const roundLine = cur.holes.length === 18
+    ? `Round ${cur.num}: ${strokes} (${esc(cur.disp)})`
+    : `Round ${cur.num}: ${esc(cur.disp)} thru ${cur.holes.length}`;
   $("scBody").innerHTML = half(1, "OUT") + half(10, "IN") +
+    `<p class="sc-rtotal">${roundLine}</p>` +
     `<p class="small sc-legend"><span class="sc-eagle">eagle</span><span class="sc-birdie">birdie</span><span class="sc-bogey">bogey</span><span class="sc-double">double+</span></p>`;
 }
 

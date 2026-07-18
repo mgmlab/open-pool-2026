@@ -191,6 +191,7 @@ td.manual { color: #6ab0ff; }
 .sc-bogey { background: rgba(255, 107, 107, 0.22); }
 .sc-double { background: rgba(255, 107, 107, 0.5); }
 .sc-legend span { padding: 1px 8px; border-radius: 4px; margin-right: 6px; }
+.sc-rtotal { text-align: right; font-weight: 700; margin: 2px 2px 8px 0; }
 
 .order-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .order-row label { display: flex; flex-direction: column; font-size: 0.75rem; color: var(--muted); gap: 3px; }
