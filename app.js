@@ -652,6 +652,26 @@ function topAt(thru) {
   }).sort((a, b) => (a.sum ?? 1e9) - (b.sum ?? 1e9));
 }
 
+/* ---- configurable payouts: /config/payouts array of {type, n?, label, amount?}.
+   No config = the original default three, so existing pools are untouched. */
+const PRIZE_TYPES = {
+  roundLeader: { emoji: "🥈", name: "Leader after round N", how: (X, n) => `Top ${X} Combined leader at the end of Round ${Math.min(4, Math.max(1, Number(n) || 2))}` },
+  overall: { emoji: "🏆", name: "Overall winner", how: X => `Top ${X} Combined at the end of the tournament` },
+  bestGolfer: { emoji: "⭐", name: "Best golfer", how: () => "Lowest single golfer score at the end of the tournament" },
+  lastPlace: { emoji: "🥄", name: "Last place", how: X => `Highest Top ${X} Combined at the end of the tournament` }
+};
+const DEFAULT_PAYOUTS = [
+  { type: "roundLeader", n: 2, label: "Round 2 Payout" },
+  { type: "overall", label: "Overall Winner" },
+  { type: "bestGolfer", label: "Best Golfer" }
+];
+const customPayouts = () => (S.config && Array.isArray(S.config.payouts) && S.config.payouts.length ? S.config.payouts : null);
+const activePayouts = () => customPayouts() || DEFAULT_PAYOUTS;
+async function writePayouts(arr) {
+  try { await db.ref("config/payouts").set(arr && arr.length ? arr : null); }
+  catch (e) { alert("Couldn't save payouts: " + e.message); }
+}
+
 // all teams tied for the lead of a sorted standings list (names as an array, one per line in the payout cell)
 function leadersOf(rows, key) {
   const first = rows[0];
@@ -851,12 +871,9 @@ function renderStandings() {
       `<td class="num">${t.best ? fmtToPar(t.best.sc.total) : "—"}</td><td>${t.best ? esc(t.best.sc.pos || "") : ""}</td></tr>`
     ).join("");
 
-  // payouts (display-only): R2 prize freezes from per-round data once R2 is complete
-  const r2done = espn.eventStatus === "STATUS_FINAL" || roundComplete(2);
+  // payouts (display-only): round-leader prizes freeze from per-round data once that round completes
   const finalDone = espn.eventStatus === "STATUS_FINAL";
   const liveTop = topRows.map(t => ({ owner: t.owner, sum: t.topSum }));
-  const r2Lead = r2done ? leadersOf(topAt(2), "sum") : leadersOf(liveTop, "sum");
-  const ovLead = leadersOf(liveTop, "sum");
   const bgFirst = bestRows[0] && bestRows[0].best ? bestRows.filter(t => t.best && t.best.sc.total === bestRows[0].best.sc.total) : [];
   const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
   const payCell = (lead, done) => lead
@@ -864,9 +881,27 @@ function renderStandings() {
     : `<td class="muted">—</td><td class="muted">waiting on scores</td>`;
   $("payoutTable").innerHTML =
     `<tr><th>Prize</th><th>Leader</th><th>Status</th><th>How it's won</th></tr>` +
-    `<tr><td><b>🥈 Round 2 Payout</b></td>${payCell(r2Lead, r2done)}<td class="muted">Top ${X} Combined leader at the end of Round 2</td></tr>` +
-    `<tr><td><b>🏆 Overall Winner</b></td>${payCell(ovLead, finalDone)}<td class="muted">Top ${X} Combined at the end of the tournament</td></tr>` +
-    `<tr><td><b>⭐ Best Golfer</b></td>${payCell(bgLead, finalDone)}<td class="muted">Lowest single golfer score at the end of the tournament</td></tr>`;
+    activePayouts().map(p => {
+      let lead = null, done = false;
+      if (p.type === "roundLeader") {
+        const n = Math.min(4, Math.max(1, Number(p.n) || 2));
+        done = finalDone || roundComplete(n);
+        lead = done ? leadersOf(topAt(n), "sum") : leadersOf(liveTop, "sum");
+      } else if (p.type === "overall") { done = finalDone; lead = leadersOf(liveTop, "sum"); }
+      else if (p.type === "bestGolfer") { done = finalDone; lead = bgLead; }
+      else if (p.type === "lastPlace") {
+        done = finalDone;
+        const scored = liveTop.filter(r => r.sum != null);
+        if (scored.length) {
+          const worst = scored[scored.length - 1].sum;
+          const names = scored.filter(r => r.sum === worst).map(r => r.owner);
+          lead = { names, value: worst, tie: names.length > 1 };
+        }
+      }
+      const t = PRIZE_TYPES[p.type] || { emoji: "💰", how: () => "" };
+      const amount = p.amount ? `<div class="muted small">${esc(String(p.amount))}</div>` : "";
+      return `<tr><td><b>${t.emoji} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${t.how(X, p.n)}</td></tr>`;
+    }).join("");
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
   $("rosterScores").innerHTML = teams.map(t => {
@@ -906,6 +941,19 @@ function renderAdmin() {
   // settings: reflect the saved pool name unless the admin is mid-edit
   const pn = $("poolNameInput");
   if (document.activeElement !== pn && S.config) pn.value = S.config.poolName || "";
+
+  // settings: current payout list (default entries shown until customized)
+  const plist = $("payoutList");
+  if (!plist.contains(document.activeElement)) {
+    const arr = activePayouts();
+    plist.innerHTML = arr.map((p, i) => {
+      const t = PRIZE_TYPES[p.type] || { name: p.type };
+      const meta = `${t.name}${p.type === "roundLeader" ? " (R" + (Number(p.n) || 2) + ")" : ""}`;
+      return `<div class="queue-row"><span class="qnum">${i + 1}.</span>` +
+        `<span class="name">${esc(p.label || t.name)}${p.amount ? ` <span class="muted small">${esc(String(p.amount))}</span>` : ""} <span class="muted small">— ${esc(meta)}</span></span>` +
+        `<button data-pzup="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-pzdel="${i}">✕</button></div>`;
+    }).join("") + (customPayouts() ? "" : `<div class="muted small" style="padding:4px 0">These are the defaults — add, remove, or reorder to customize.</div>`);
+  }
 
   // draft order selects (skip rebuild while user is choosing)
   const wrap = $("orderSelects");
@@ -1034,6 +1082,29 @@ $("queueList").addEventListener("click", e => {
 $("adminUnlock").addEventListener("click", adminUnlock);
 $("adminPass").addEventListener("keydown", e => { if (e.key === "Enter") adminUnlock(); });
 $("saveConfig").addEventListener("click", saveConfig);
+$("pzType").addEventListener("change", () => { $("pzN").style.display = $("pzType").value === "roundLeader" ? "" : "none"; });
+$("pzAddBtn").addEventListener("click", () => {
+  const type = $("pzType").value;
+  const t = PRIZE_TYPES[type];
+  const prize = { type, label: $("pzLabel").value.trim() || t.name };
+  if (type === "roundLeader") prize.n = parseInt($("pzN").value, 10) || 2;
+  const amount = $("pzAmount").value.trim();
+  if (amount) prize.amount = amount;
+  writePayouts([...activePayouts(), prize]);
+  $("pzLabel").value = ""; $("pzAmount").value = "";
+});
+$("payoutList").addEventListener("click", e => {
+  const up = e.target.dataset?.pzup, del = e.target.dataset?.pzdel;
+  if (up == null && del == null) return;
+  const arr = activePayouts().slice();
+  if (up != null) { const i = +up; if (i > 0) [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; }
+  else arr.splice(+del, 1);
+  writePayouts(arr);
+});
+$("pzResetBtn").addEventListener("click", () => {
+  if (confirm("Reset the Leaders tab to the default three payouts?")) writePayouts(null);
+});
+
 $("savePoolName").addEventListener("click", async () => {
   const name = $("poolNameInput").value.trim();
   try {

@@ -151,9 +151,26 @@
       </div>
       <div class="panel hidden" id="admin-settings">
         <h2>Settings</h2>
-        <p class="muted small">Pool name — shown in the page header and the browser tab. Leave blank for the default.</p>
+        <h3>Pool name</h3>
+        <p class="muted small">Shown in the page header and the browser tab. Leave blank for the default.</p>
         <input type="text" id="poolNameInput" maxlength="60" placeholder="The Open - 2026 Snake Draft">
         <button id="savePoolName">Save name</button>
+        <h3>Payouts</h3>
+        <p class="muted small">Prizes shown on the Leaders tab. Changes apply live for everyone.</p>
+        <div id="payoutList"></div>
+        <div class="btn-row" style="margin-top:8px">
+          <select id="pzType">
+            <option value="roundLeader">Leader after round N</option>
+            <option value="overall">Overall winner</option>
+            <option value="bestGolfer">Best golfer</option>
+            <option value="lastPlace">Last place</option>
+          </select>
+          <select id="pzN"><option>1</option><option selected>2</option><option>3</option></select>
+          <input type="text" id="pzLabel" maxlength="40" placeholder="Label (e.g. Friday Money)" style="width:200px">
+          <input type="text" id="pzAmount" maxlength="12" placeholder="$ (optional)" style="width:100px">
+          <button id="pzAddBtn">Add prize</button>
+        </div>
+        <button id="pzResetBtn" class="danger" style="margin-top:8px">Reset to default payouts</button>
       </div>
     </div>
   </section>
@@ -172,6 +189,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>
