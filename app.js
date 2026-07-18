@@ -1086,8 +1086,10 @@ $("pzType").addEventListener("change", () => { $("pzN").style.display = $("pzTyp
 $("pzAddBtn").addEventListener("click", () => {
   const type = $("pzType").value;
   const t = PRIZE_TYPES[type];
-  const prize = { type, label: $("pzLabel").value.trim() || t.name };
-  if (type === "roundLeader") prize.n = parseInt($("pzN").value, 10) || 2;
+  const n = parseInt($("pzN").value, 10) || 2;
+  const defaultLabel = type === "roundLeader" ? `Leader after round ${n}` : t.name;
+  const prize = { type, label: $("pzLabel").value.trim() || defaultLabel };
+  if (type === "roundLeader") prize.n = n;
   const amount = $("pzAmount").value.trim();
   if (amount) prize.amount = amount;
   writePayouts([...activePayouts(), prize]);
