@@ -10,7 +10,7 @@
 <body>
 <header>
   <div class="header-row">
-    <h1>⛳ The Open - 2026 Snake Draft</h1>
+    <h1 id="siteTitle">⛳ The Open - 2026 Snake Draft</h1>
     <div id="connStatus" class="conn hidden"></div>
   </div>
   <div id="banner" class="banner hidden"></div>
@@ -111,6 +111,7 @@
         <button data-subtab="control" class="subtab">Draft Control</button>
         <button data-subtab="usage" class="subtab">Usage</button>
         <button data-subtab="fixes" class="subtab">Scoring Fixes</button>
+        <button data-subtab="settings" class="subtab">Settings</button>
       </nav>
       <div class="panel" id="admin-setup">
         <h2>Draft Setup</h2>
@@ -148,6 +149,12 @@
         <p class="muted small">Fix golfers that don't match ESPN's leaderboard: map to the ESPN name, or set a manual total-score override.</p>
         <div class="table-wrap"><table id="fixTable"></table></div>
       </div>
+      <div class="panel hidden" id="admin-settings">
+        <h2>Settings</h2>
+        <p class="muted small">Pool name — shown in the page header and the browser tab. Leave blank for the default.</p>
+        <input type="text" id="poolNameInput" maxlength="60" placeholder="The Open - 2026 Snake Draft">
+        <button id="savePoolName">Save name</button>
+      </div>
     </div>
   </section>
 </main>
@@ -165,6 +172,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=29"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

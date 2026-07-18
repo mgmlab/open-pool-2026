@@ -333,7 +333,8 @@ async function saveConfig() {
   if (!confirm(`Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks, best ${topCount} scores count?`)) return;
   const ownersMap = {};
   for (const n of names) ownersMap[n] = true;
-  const updates = { config: { teams: names.length, rounds, topCount, owners: ownersMap } };
+  // update config subkeys individually so settings like poolName survive a league re-save
+  const updates = { "config/teams": names.length, "config/rounds": rounds, "config/topCount": topCount, "config/owners": ownersMap };
   const cur = S.state && Array.isArray(S.state.draftOrder) ? S.state.draftOrder : [];
   const sameSet = cur.length === names.length && cur.every(o => ownersMap[o]) && new Set(cur).size === cur.length;
   updates["state/draftOrder"] = sameSet ? cur : names.slice().sort((a, b) => a.localeCompare(b));
@@ -700,10 +701,13 @@ function renderAutodraft() {
   if (show) ab.textContent = `🤖 AUTODRAFT ENABLED — ${me.owner}, your picks will be made automatically (your queue first, then best available odds), even if your screen locks. Uncheck "Autodraft my picks" to take back control.`;
 }
 
+const poolName = () => (S.config && S.config.poolName) || "The Open - 2026 Snake Draft";
+
 function renderBanner() {
   const b = $("banner");
   b.classList.remove("hidden", "me", "done");
-  let title = "The Open - 2026 Snake Draft";
+  $("siteTitle").textContent = "⛳ " + poolName();
+  let title = poolName();
   if (!S.loaded) { b.classList.add("hidden"); }
   else if (!S.state) { b.textContent = "Not initialized — admin: unlock the Admin tab and press Full reset."; }
   else if (phase() === "setup") { b.textContent = "🏌️ Draft has not started yet"; }
@@ -715,14 +719,14 @@ function renderBanner() {
     const started = espn.eventStatus && espn.eventStatus !== "STATUS_SCHEDULED";
     if (started) b.classList.add("hidden");
     else { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); }
-    title = "🏆 The Open - 2026 Snake Draft";
+    title = "🏆 " + poolName();
   }
   else {
     const o = onClockOwner();
     const i = currentPick();
     b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
     if (o === me.owner) { b.classList.add("me"); b.textContent += "  — THAT'S YOU!"; }
-    title = `⏰ ${o} is up — The Open - 2026 Snake Draft`;
+    title = `⏰ ${o} is up — ${poolName()}`;
   }
   document.title = title;
 }
@@ -899,6 +903,10 @@ function renderAdmin() {
   $("adminPanel").classList.toggle("hidden", !me.admin);
   if (!me.admin) return;
 
+  // settings: reflect the saved pool name unless the admin is mid-edit
+  const pn = $("poolNameInput");
+  if (document.activeElement !== pn && S.config) pn.value = S.config.poolName || "";
+
   // draft order selects (skip rebuild while user is choosing)
   const wrap = $("orderSelects");
   if (!wrap.contains(document.activeElement)) {
@@ -985,7 +993,7 @@ document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", (
 
 document.querySelectorAll("#adminTabs .subtab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll("#adminTabs .subtab").forEach(b => b.classList.toggle("active", b === btn));
-  for (const t of ["setup", "control", "usage", "fixes"]) $("admin-" + t).classList.toggle("hidden", btn.dataset.subtab !== t);
+  for (const t of ["setup", "control", "usage", "fixes", "settings"]) $("admin-" + t).classList.toggle("hidden", btn.dataset.subtab !== t);
 }));
 
 function showStandingsSub(name) {
@@ -1026,6 +1034,13 @@ $("queueList").addEventListener("click", e => {
 $("adminUnlock").addEventListener("click", adminUnlock);
 $("adminPass").addEventListener("keydown", e => { if (e.key === "Enter") adminUnlock(); });
 $("saveConfig").addEventListener("click", saveConfig);
+$("savePoolName").addEventListener("click", async () => {
+  const name = $("poolNameInput").value.trim();
+  try {
+    await db.ref("config/poolName").set(name || null);
+    alert(name ? `Pool name saved: ${name}` : "Pool name cleared — using the default.");
+  } catch (e) { alert("Couldn't save: " + e.message); }
+});
 $("saveOrder").addEventListener("click", saveOrder);
 $("saveField").addEventListener("click", saveField);
 $("startDraft").addEventListener("click", startDraft);
