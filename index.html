@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
 <header>
@@ -82,6 +82,10 @@
           <div class="table-wrap"><table id="bestTable"></table></div>
         </div>
       </div>
+      <div class="panel hidden" id="pastPanel">
+        <h2>🗄 Past Tournaments</h2>
+        <div id="pastBody"></div>
+      </div>
     </div>
     <div id="ssub-rosters" class="hidden">
       <div class="panel">
@@ -151,6 +155,13 @@
       </div>
       <div class="panel" id="admin-settings">
         <h2>Settings</h2>
+        <h3>Tournament</h3>
+        <p class="muted small">Currently: <b id="curEventName">&hellip;</b></p>
+        <div class="btn-row">
+          <select id="eventSelect"><option value="">Loading season calendar&hellip;</option></select>
+          <button id="switchEventBtn" class="danger">Archive results &amp; switch</button>
+        </div>
+        <p class="muted small">Switching saves the finished standings &amp; payout winners to Past Tournaments (on the Leaders tab), clears picks and the golfer field, and starts a new draft cycle. Teams, seats, pool name and payout settings are kept.</p>
         <h3>Pool name</h3>
         <p class="muted small">Shown in the page header and the browser tab. Leave blank for the default.</p>
         <input type="text" id="poolNameInput" maxlength="60" placeholder="The Open - 2026 Snake Draft">
@@ -191,6 +202,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=35"></script>
+<script src="app.js?v=36"></script>
 </body>
 </html>

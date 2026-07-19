@@ -171,6 +171,9 @@ td.manual { color: #6ab0ff; }
 .team-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .team-link:hover { color: var(--green); }
 .roster-card { scroll-margin-top: 90px; }
+.archive-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.archive-card h4 { margin-bottom: 4px; }
+.archive-card table { max-width: 360px; font-size: 0.85rem; }
 .roster-card.flash { outline: 2px solid var(--gold); box-shadow: 0 0 16px rgba(245, 197, 24, 0.35); }
 #lbPanel { scroll-margin-top: 90px; }
 .sc-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 12px; }

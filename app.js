@@ -486,6 +486,100 @@ async function fetchScores(manual) {
   renderBanner(); // banner visibility depends on eventStatus once the draft is done
 }
 
+/* ---- tournament switching: dropdown from ESPN's season calendar; switching archives
+   the finished pool to /config/archives and starts a fresh draft cycle for the new event ---- */
+const eventName = () => (S.config && S.config.eventName) || espn.eventName || "the tournament";
+const currentEventId = () => (S.state && S.state.espnEventId) || ESPN_EVENT_ID;
+
+let calendarLoaded = false;
+async function loadCalendar() {
+  if (calendarLoaded) return;
+  calendarLoaded = true; // set first so a slow fetch isn't kicked off repeatedly by re-renders
+  try {
+    const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const cal = (data?.leagues?.[0]?.calendar || []).filter(e => e.id && e.label);
+    if (!cal.length) throw new Error("empty calendar");
+    const fmt = d => { const t = new Date(d); return isNaN(t) ? "" : t.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
+    $("eventSelect").innerHTML = cal.map(e =>
+      `<option value="${esc(e.id)}" data-name="${esc(e.label)}">${esc(e.label)}${e.startDate ? ` — ${fmt(e.startDate)}` : ""}</option>`).join("");
+    const cur = currentEventId();
+    if ([...$("eventSelect").options].some(o => o.value === cur)) $("eventSelect").value = cur;
+  } catch (e) {
+    calendarLoaded = false;
+    $("eventSelect").innerHTML = `<option value="">calendar failed to load — reopen Settings to retry</option>`;
+  }
+}
+
+// compact snapshot of the finished tournament, stored under /config/archives
+function buildArchive(evtId) {
+  const { teams } = computeStandings();
+  const topRows = teams.slice().sort((a, b) => (a.topSum ?? 1e9) - (b.topSum ?? 1e9));
+  const bestRows = teams.slice().sort((a, b) => (a.best ? a.best.sc.total : 1e9) - (b.best ? b.best.sc.total : 1e9));
+  return {
+    eventId: String(evtId),
+    name: eventName(),
+    archivedAt: firebase.database.ServerValue.TIMESTAMP,
+    poolName: (S.config && S.config.poolName) || null,
+    topCount: numTop(),
+    standings: topRows.map(t => ({ owner: t.owner, sum: t.topSum ?? null })),
+    payouts: computePayoutRows(topRows, bestRows).map(r => ({
+      emoji: r.emoji, label: r.label, amount: r.amount,
+      names: r.lead ? r.lead.names : [], value: r.lead ? r.lead.value : null, done: r.done
+    })),
+    rosters: teams.map(t => ({
+      owner: t.owner,
+      golfers: t.rows.map(r => ({ name: r.pick.name, total: r.sc.matched ? (r.sc.total ?? null) : null, out: !!r.sc.out }))
+    }))
+  };
+}
+
+async function switchEvent() {
+  const sel = $("eventSelect");
+  const id = sel.value;
+  if (!id) { alert("Pick a tournament first."); return; }
+  const name = sel.selectedOptions[0]?.dataset.name || id;
+  if (id === currentEventId()) { alert("That's already the current tournament."); return; }
+  if (!confirm(`Switch to ${name}?\n\nThis archives the current results to Past Tournaments, clears all picks and the golfer field, and starts a new draft cycle.\n\nKept: teams, seats, pool name, payout settings.`)) return;
+  const updates = {};
+  if (Object.keys(S.picks || {}).length) {
+    updates["config/archives/evt" + currentEventId() + "_" + Date.now()] = buildArchive(currentEventId());
+  }
+  updates["state/espnEventId"] = id;
+  updates["state/phase"] = "setup";
+  updates["state/currentPick"] = 0;
+  updates["config/eventName"] = name;
+  updates["config/recap"] = null;
+  updates["picks"] = null;
+  updates["pickedGolfers"] = null;
+  updates["schedule"] = null;
+  updates["golfers"] = null;
+  updates["overrides"] = null;
+  updates["autodraft"] = null;
+  for (const o of owners()) updates["queues/" + o] = null;
+  try { await db.ref().update(updates); }
+  catch (e) { alert("Switch failed: " + e.message); return; }
+  espn.fetchedAt = 0; espn.competitors = []; espn.byNorm = {}; espn.eventStatus = null; espn.eventName = null; espn.error = null;
+  fetchScores(false);
+  alert(`Switched to ${name}. Paste the golfer field in Draft Setup and start the draft when ready.`);
+}
+
+function renderPastTournaments() {
+  const archives = (S.config && S.config.archives) || null;
+  $("pastPanel").classList.toggle("hidden", !archives);
+  if (!archives) return;
+  const list = Object.entries(archives).sort((a, b) => (b[1].archivedAt || 0) - (a[1].archivedAt || 0));
+  $("pastBody").innerHTML = list.map(([, a]) =>
+    `<div class="archive-card">` +
+    `<h4>${esc(a.name || "Tournament")}${a.archivedAt ? ` <span class="muted small">${new Date(a.archivedAt).toLocaleDateString()}</span>` : ""}</h4>` +
+    (a.payouts || []).map(p =>
+      `<div class="small" style="padding:2px 0">${esc(p.emoji || "💰")} ${esc(p.label)}: <b>${esc((p.names || []).join(" & ") || "—")}</b>${p.value != null ? ` (${fmtToPar(p.value)})` : ""}${p.amount ? ` <span class="muted">· ${esc(String(p.amount))}</span>` : ""}</div>`).join("") +
+    `<div class="table-wrap" style="margin-top:8px"><table><tr><th>#</th><th>Team</th><th class=num>Top ${a.topCount || ""}</th></tr>` +
+    (a.standings || []).map((s, i) => `<tr class="rank-${i + 1}"><td>${i + 1}</td><td>${esc(s.owner)}</td><td class=num>${fmtToPar(s.sum)}</td></tr>`).join("") +
+    `</table></div></div>`).join("");
+}
+
 /* ---- hole-by-hole scorecard modal (display-only, fetched on demand) ---- */
 const scCache = {};
 const scUrl = id => "https://site.web.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard/" +
@@ -674,6 +768,35 @@ async function writePayouts(arr) {
   catch (e) { alert("Couldn't save payouts: " + e.message); }
 }
 
+// resolve every configured prize to its current leader/winner (shared by the Leaders tab and archiving)
+function computePayoutRows(topRows, bestRows) {
+  const X = numTop();
+  const finalDone = espn.eventStatus === "STATUS_FINAL";
+  const liveTop = topRows.map(t => ({ owner: t.owner, sum: t.topSum }));
+  const bgFirst = bestRows[0] && bestRows[0].best ? bestRows.filter(t => t.best && t.best.sc.total === bestRows[0].best.sc.total) : [];
+  const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
+  return activePayouts().map(p => {
+    let lead = null, done = false;
+    if (p.type === "roundLeader") {
+      const n = Math.min(4, Math.max(1, Number(p.n) || 2));
+      done = finalDone || roundComplete(n);
+      lead = done ? leadersOf(topAt(n), "sum") : leadersOf(liveTop, "sum");
+    } else if (p.type === "overall") { done = finalDone; lead = leadersOf(liveTop, "sum"); }
+    else if (p.type === "bestGolfer") { done = finalDone; lead = bgLead; }
+    else if (p.type === "lastPlace") {
+      done = finalDone;
+      const scored = liveTop.filter(r => r.sum != null);
+      if (scored.length) {
+        const worst = scored[scored.length - 1].sum;
+        const names = scored.filter(r => r.sum === worst).map(r => r.owner);
+        lead = { names, value: worst, tie: names.length > 1 };
+      }
+    }
+    const t = PRIZE_TYPES[p.type] || { emoji: "💰", how: () => "" };
+    return { emoji: p.emoji || t.emoji, label: p.label || p.type, amount: p.amount || null, how: p.how || t.how(X, p.n), lead, done };
+  });
+}
+
 // all teams tied for the lead of a sorted standings list (names as an array, one per line in the payout cell)
 function leadersOf(rows, key) {
   const first = rows[0];
@@ -740,7 +863,7 @@ function renderBanner() {
     // back at setup -> draft -> complete, so the banner sequence is reused as-is.
     const started = espn.eventStatus && espn.eventStatus !== "STATUS_SCHEDULED";
     if (started) b.classList.add("hidden");
-    else { b.textContent = "✅ Draft complete — scores update during The Open"; b.classList.add("done"); }
+    else { b.textContent = "✅ Draft complete — scores update during " + eventName(); b.classList.add("done"); }
     title = "🏆 " + poolName();
   }
   else {
@@ -874,36 +997,16 @@ function renderStandings() {
     ).join("");
 
   // payouts (display-only): round-leader prizes freeze from per-round data once that round completes
-  const finalDone = espn.eventStatus === "STATUS_FINAL";
-  const liveTop = topRows.map(t => ({ owner: t.owner, sum: t.topSum }));
-  const bgFirst = bestRows[0] && bestRows[0].best ? bestRows.filter(t => t.best && t.best.sc.total === bestRows[0].best.sc.total) : [];
-  const bgLead = bgFirst.length ? { names: bgFirst.map(t => `${t.owner} (${t.best.pick.name})`), value: bestRows[0].best.sc.total, tie: bgFirst.length > 1 } : null;
   const payCell = (lead, done) => lead
     ? `<td class="pay-lead">${lead.names.map(n => `<div>${esc(n)}</div>`).join("")}<div class="muted small">${fmtToPar(lead.value)}${lead.tie ? " — tie" : ""}</div></td><td>${done ? '<span class="counted">🏆 WINNER — pays out</span>' : '<span class="muted">current leader</span>'}</td>`
     : `<td class="muted">—</td><td class="muted">waiting on scores</td>`;
   $("payoutTable").innerHTML =
     `<tr><th>Prize</th><th>Leader</th><th>Status</th><th>How it's won</th></tr>` +
-    activePayouts().map(p => {
-      let lead = null, done = false;
-      if (p.type === "roundLeader") {
-        const n = Math.min(4, Math.max(1, Number(p.n) || 2));
-        done = finalDone || roundComplete(n);
-        lead = done ? leadersOf(topAt(n), "sum") : leadersOf(liveTop, "sum");
-      } else if (p.type === "overall") { done = finalDone; lead = leadersOf(liveTop, "sum"); }
-      else if (p.type === "bestGolfer") { done = finalDone; lead = bgLead; }
-      else if (p.type === "lastPlace") {
-        done = finalDone;
-        const scored = liveTop.filter(r => r.sum != null);
-        if (scored.length) {
-          const worst = scored[scored.length - 1].sum;
-          const names = scored.filter(r => r.sum === worst).map(r => r.owner);
-          lead = { names, value: worst, tie: names.length > 1 };
-        }
-      }
-      const t = PRIZE_TYPES[p.type] || { emoji: "💰", how: () => "" };
-      const amount = p.amount ? `<div class="muted small">${esc(String(p.amount))}</div>` : "";
-      return `<tr><td><b>${esc(p.emoji || t.emoji)} ${esc(p.label || p.type)}</b>${amount}</td>${payCell(lead, done)}<td class="muted">${p.how ? esc(p.how) : t.how(X, p.n)}</td></tr>`;
-    }).join("");
+    computePayoutRows(topRows, bestRows).map(r =>
+      `<tr><td><b>${esc(r.emoji)} ${esc(r.label)}</b>${r.amount ? `<div class="muted small">${esc(String(r.amount))}</div>` : ""}</td>${payCell(r.lead, r.done)}<td class="muted">${esc(r.how)}</td></tr>`
+    ).join("");
+
+  renderPastTournaments();
 
   // roster cards (✓ marks the golfers currently counting toward the Top X total)
   $("rosterScores").innerHTML = teams.map(t => {
@@ -939,6 +1042,10 @@ function renderAdmin() {
   $("adminLock").classList.toggle("hidden", me.admin);
   $("adminPanel").classList.toggle("hidden", !me.admin);
   if (!me.admin) return;
+
+  // settings: current tournament + season calendar for the switch dropdown
+  $("curEventName").textContent = `${eventName()} (event ${currentEventId()})`;
+  loadCalendar();
 
   // settings: reflect the saved pool name unless the admin is mid-edit
   const pn = $("poolNameInput");
@@ -1113,6 +1220,7 @@ $("pzResetBtn").addEventListener("click", () => {
   if (confirm("Reset the Leaders tab to the default three payouts?")) writePayouts(null);
 });
 
+$("switchEventBtn").addEventListener("click", switchEvent);
 $("savePoolName").addEventListener("click", async () => {
   const name = $("poolNameInput").value.trim();
   try {
