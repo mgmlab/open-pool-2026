@@ -367,10 +367,48 @@ function parseFieldText(text) {
   return { golfers, dupes };
 }
 
-// pull the field from ESPN's event feed (exact spellings = zero match risk); any odds
-// already in the box are carried over by normalized name, so CBS paste + import combine
+/* field import: names from ESPN's event feed (exact spellings = zero match risk),
+   odds from The Odds API for the four majors (free key, stored only on this device).
+   Any odds already pasted in the box are kept as a fallback by normalized name. */
+function majorSportKey() {
+  const n = (eventName() || "").toLowerCase();
+  if (n.includes("masters")) return "golf_masters_tournament_winner";
+  if (n.includes("pga championship")) return "golf_pga_championship_winner";
+  if (n.includes("open championship") || /\bthe open\b/.test(n)) return "golf_the_open_championship_winner";
+  if (n.includes("u.s. open") || n.includes("us open")) return "golf_us_open_winner";
+  return null;
+}
+
+async function fetchMajorOdds() {
+  const sportKey = majorSportKey();
+  if (!sportKey) return { odds: null, note: " (odds auto-import covers the four majors only — paste odds for other events)" };
+  let apiKey = localStorage.getItem("op26_oddsapi") || "";
+  if (!apiKey) {
+    apiKey = (prompt("To auto-import odds, paste a free API key from the-odds-api.com (stored only on this device).\n\nLeave blank to import names only.") || "").trim();
+    if (apiKey) localStorage.setItem("op26_oddsapi", apiKey);
+  }
+  if (!apiKey) return { odds: null, note: "" };
+  try {
+    const r = await fetch(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds?regions=us&markets=outrights&oddsFormat=american&apiKey=${encodeURIComponent(apiKey)}`);
+    if (r.status === 401) { localStorage.removeItem("op26_oddsapi"); throw new Error("API key rejected — it was cleared, try again"); }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const events = await r.json();
+    const bm = (events[0]?.bookmakers || []).find(b => b.markets?.some(m => m.key === "outrights" && m.outcomes?.length));
+    const outcomes = bm?.markets.find(m => m.key === "outrights")?.outcomes || [];
+    if (!outcomes.length) return { odds: null, note: " (no odds posted yet for this event)" };
+    const odds = {};
+    for (const o of outcomes) {
+      const p = Number(o.price);
+      if (Number.isFinite(p) && p > 0) odds[normName(o.name)] = Math.round(p);
+    }
+    return { odds, note: ` · odds from ${bm.title || "sportsbook"}` };
+  } catch (e) {
+    return { odds: null, note: ` (odds import failed: ${e.message})` };
+  }
+}
+
 async function importField() {
-  $("fieldInfo").textContent = "Importing from ESPN…";
+  $("fieldInfo").textContent = "Importing…";
   try {
     const res = await fetch(espnUrl());
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -383,17 +421,18 @@ async function importField() {
       return;
     }
     const existingOdds = {};
-    let carried = 0;
     for (const g of Object.values(parseFieldText($("fieldInput").value).golfers)) {
       if (g.odds != null) existingOdds[normName(g.name)] = g.odds;
     }
+    const { odds: bookOdds, note } = await fetchMajorOdds();
+    let withOdds = 0;
     names.sort((a, b) => a.localeCompare(b));
     $("fieldInput").value = names.map(n => {
-      const o = existingOdds[normName(n)];
-      if (o != null) carried++;
+      const o = (bookOdds && bookOdds[normName(n)]) ?? existingOdds[normName(n)];
+      if (o != null) withOdds++;
       return o != null ? `${n}, +${o}` : n;
     }).join("\n");
-    $("fieldInfo").textContent = `Imported ${names.length} golfers from ESPN${carried ? ` (${carried} odds carried over)` : ""} — review, then press Save field.`;
+    $("fieldInfo").textContent = `Imported ${names.length} golfers${withOdds ? `, ${withOdds} with odds` : ""}${note} — review, then press Save field.`;
   } catch (e) {
     $("fieldInfo").textContent = "";
     alert("Import failed: " + e.message);
