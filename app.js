@@ -377,7 +377,7 @@ async function adminUnlock() {
 
 async function changeAdminPass() {
   const np = $("newPassInput").value.trim();
-  if (np.length < 6) { alert("Pick a passphrase of at least 6 characters."); return; }
+  if (np.length < 4) { alert("Pick a passphrase of at least 4 characters."); return; }
   if (!confirm(`Change the admin passphrase? Anyone unlocking admin from now on needs the new one.`)) return;
   try {
     const hash = await sha256Hex(np);
