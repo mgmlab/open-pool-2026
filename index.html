@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=41">
+<link rel="stylesheet" href="style.css?v=42">
 </head>
 <body>
 <header>
@@ -42,6 +42,7 @@
       <div class="panel" id="pickPanel">
         <h2>Available Golfers <span id="availCount" class="muted"></span></h2>
         <div id="tierInfo" class="tier-info hidden"></div>
+        <div id="tierWhoWrap" class="hidden"><label class="muted small">Editing picks for: <select id="tierWho"></select></label></div>
         <div id="queueBox" class="queue-box hidden">
           <h3>My Queue <span class="muted small">(auto-picks in order when Autodraft is on)</span></h3>
           <div id="queueList"></div>
@@ -180,6 +181,10 @@
         <p class="muted small">Shown in the page header and the browser tab. Leave blank for the default.</p>
         <input type="text" id="poolNameInput" maxlength="60" placeholder="The Open - 2026 Snake Draft">
         <button id="savePoolName">Save name</button>
+        <h3>Admin passphrase</h3>
+        <p class="muted small">Changes what unlocks this Admin tab. Devices already unlocked stay unlocked.</p>
+        <input type="text" id="newPassInput" maxlength="60" placeholder="New passphrase (6+ characters)">
+        <button id="savePassBtn">Change passphrase</button>
         <h3>Payouts</h3>
         <p class="muted small">Prizes shown on the Leaders tab. Changes apply live for everyone.</p>
         <div id="payoutList"></div>
@@ -216,6 +221,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=41"></script>
+<script src="app.js?v=42"></script>
 </body>
 </html>

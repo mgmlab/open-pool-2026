@@ -22,8 +22,10 @@ const ESPN_EVENT_ID = "401811957"; // can be overridden via /state/espnEventId i
 const espnUrl = () => "https://site.web.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=" + (S.state?.espnEventId || ESPN_EVENT_ID);
 const POLL_MS = 3 * 60 * 1000;
 
-// SHA-256 of the admin passphrase (client-side gate; DB rules enforce for real)
-const ADMIN_HASH = "476bd2cff73bedea2bab7696c3e24f09a7fd075c163a4f42a80ee978d56b0300";
+// The admin passphrase is verified SERVER-side: unlocking attempts to write
+// admin/authorized/{uid} = sha256(pass), which the DB rules only accept when it
+// matches /admin/passHash. No hash ships in this file, and the passphrase can be
+// changed from Settings.
 
 /* ================= STATE ================= */
 firebase.initializeApp(firebaseConfig);
@@ -277,9 +279,14 @@ function ensureTierPickSubs() {
 }
 
 const myTierPicks = () => (me.owner && (S.tierPicks || {})[me.owner]) || [];
-async function writeTierPicks(arr) {
-  if (!me.owner) return;
-  try { await db.ref("tierPicks/" + me.owner).set(arr.length ? arr : null); }
+
+// admins can make tier picks on behalf of any team (e.g. over the phone)
+let tierTarget = null;
+const tierOwnerEditing = () => (me.admin && tierTarget) || me.owner;
+
+async function writeTierPicks(owner, arr) {
+  if (!owner) return;
+  try { await db.ref("tierPicks/" + owner).set(arr.length ? arr : null); }
   catch (e) { alert("Couldn't save picks — admin may still need to update the database rules. (" + e.message + ")"); }
 }
 
@@ -350,16 +357,37 @@ function scheduleAutodraft() {
 /* ---- admin actions ---- */
 async function adminUnlock() {
   const pass = $("adminPass").value;
-  const hash = await sha256Hex(pass);
-  if (hash !== ADMIN_HASH) { $("adminErr").textContent = "Wrong passphrase."; $("adminErr").classList.remove("hidden"); return; }
+  if (!pass) return;
+  const uid = firebase.auth().currentUser?.uid;
+  if (!uid) { $("adminErr").textContent = "Still connecting — try again in a second."; $("adminErr").classList.remove("hidden"); return; }
+  try {
+    // the rules only accept this write if the hash matches /admin/passHash
+    await db.ref("admin/authorized/" + uid).set(await sha256Hex(pass));
+  } catch (e) {
+    $("adminErr").textContent = "Wrong passphrase.";
+    $("adminErr").classList.remove("hidden");
+    return;
+  }
+  $("adminErr").classList.add("hidden");
   me.admin = true;
   localStorage.setItem("op26_admin", pass);
-  // Prove admin to the database (used by security rules once auth is enabled).
-  const uid = firebase.auth().currentUser?.uid;
-  if (uid) db.ref("admin/authorized/" + uid).set(hash).catch(() => {});
-  db.ref("admin/passHash").set(hash).catch(() => {}); // seeds on first run; locked writes ignore
   subscribeAdminStats();
   render();
+}
+
+async function changeAdminPass() {
+  const np = $("newPassInput").value.trim();
+  if (np.length < 6) { alert("Pick a passphrase of at least 6 characters."); return; }
+  if (!confirm(`Change the admin passphrase? Anyone unlocking admin from now on needs the new one.`)) return;
+  try {
+    const hash = await sha256Hex(np);
+    await db.ref("admin/passHash").set(hash);
+    const uid = firebase.auth().currentUser?.uid;
+    if (uid) await db.ref("admin/authorized/" + uid).set(hash);
+    localStorage.setItem("op26_admin", np);
+    $("newPassInput").value = "";
+    alert("Passphrase changed. This device stays unlocked; share the new passphrase as needed.");
+  } catch (e) { alert("Couldn't change it — the database rules may need updating first. (" + e.message + ")"); }
 }
 
 function buildSchedule(order) {
@@ -1122,28 +1150,46 @@ function buildAutoRecap(rosters) {
   const grades = ["A", "A-", "B+", "B+", "B", "B-", "C+", "C", "C-", "D"];
   const BANK = {
     chalk: {
-      tag: ["The odds board is a menu and they ordered the specials.", "Chalk never apologizes.", "Vegas would co-sign this roster."],
+      tag: ["The odds board is a menu and they ordered the specials.", "Chalk never apologizes.", "Vegas would co-sign this roster.", "Favorites, favorites everywhere.", "Playing the hits, no deep cuts.", "The safest hands in the room."],
       blurb: [
         "{owner} went straight down the odds board and let the favorites do the talking. {top} headlines a roster the sportsbooks would be proud of. The sneaky one: {steal} at {stealOdds}, grabbed later than the number deserved.",
-        "No hero-ball here — {owner} drafted the names everyone knows. If {top} plays to the number, this team bores its way to the money. {reach} is the lone eyebrow-raiser; the algorithm noticed."
+        "No hero-ball here — {owner} drafted the names everyone knows. If {top} plays to the number, this team bores its way to the money. {reach} is the lone eyebrow-raiser; the algorithm noticed.",
+        "{owner} treated the draft like a grocery list and bought name brands only. {top} is the anchor, {steal} at {stealOdds} is the coupon nobody else clipped, and the ceiling is exactly as advertised.",
+        "You don't get fired for drafting favorites, and {owner} isn't getting fired. {top} leads a roster with zero surprises except {steal} at {stealOdds}, who fell further than the number says he should."
       ]
     },
     balanced: {
-      tag: ["A little chalk, a little chaos.", "Diversified like a retirement portfolio.", "Something for every kind of Sunday."],
+      tag: ["A little chalk, a little chaos.", "Diversified like a retirement portfolio.", "Something for every kind of Sunday.", "Hedged bets and honest hopes.", "The sensible-shoes roster.", "Half math, half gut."],
       blurb: [
         "{owner} mixed favorites with fliers like someone who's done this before. {top} anchors it, {steal} at {stealOdds} is the value the room let slide, and {reach} is the swing that decides how this ages.",
-        "A balanced card from {owner}: chalk up top, spice down low. Best value on the sheet: {steal} at {stealOdds}. Boldest reach: {reach} — respect the conviction, question the timing."
+        "A balanced card from {owner}: chalk up top, spice down low. Best value on the sheet: {steal} at {stealOdds}. Boldest reach: {reach} — respect the conviction, question the timing.",
+        "{owner} built the kind of roster that wins quietly: {top} for the floor, {steal} at {stealOdds} for the margin, and {reach} for the group-chat debate. Nothing flashy, nothing fatal.",
+        "Equal parts spreadsheet and hunch from {owner}. {top} does the heavy lifting, {steal} at {stealOdds} was flat-out shopping smart, and {reach} is where the hunch took the wheel."
       ]
     },
     longshot: {
-      tag: ["Betting on lightning, twice.", "The longshot lifestyle is a choice.", "Powerball tickets, but they're golfers."],
+      tag: ["Betting on lightning, twice.", "The longshot lifestyle is a choice.", "Powerball tickets, but they're golfers.", "Allergic to favorites.", "Ceiling: the moon. Floor: not pictured.", "Drafting for the story, not the math."],
       blurb: [
         "{owner} looked at the favorites and said no thanks. This roster runs on {top} and vibes, with {steal} at {stealOdds} as the math-approved heist. If two of these longshots hit, nobody up top is safe — which is, presumably, the whole plan.",
-        "The board zigged and {owner} zagged. {reach} that early was a choice; {steal} at {stealOdds} that late was a robbery. High ceiling, trapdoor floor."
+        "The board zigged and {owner} zagged. {reach} that early was a choice; {steal} at {stealOdds} that late was a robbery. High ceiling, trapdoor floor.",
+        "{owner} drafted like someone who knows something the sportsbooks don't. Maybe they do! {top} is the closest thing to safety here, and {steal} at {stealOdds} is the pick the algorithm actually respects.",
+        "Bold strategy from {owner}: skip the favorites, stockpile lottery tickets. {reach} will either look brilliant or become a group-chat legend, and {steal} at {stealOdds} is genuine value hiding in the chaos."
       ]
     }
   };
-  const pick = (arr, seed) => arr[hashStr(seed) % arr.length];
+  // no two teams get the same line: walk the archetype's bank from a hashed start,
+  // then spill into the other archetypes' banks before ever repeating
+  const usedText = { tag: new Set(), blurb: new Set() };
+  const pick = (kind, arch, seed) => {
+    const own = BANK[arch][kind];
+    const pool = [...own, ...Object.keys(BANK).filter(a => a !== arch).flatMap(a => BANK[a][kind])];
+    const start = hashStr(seed) % own.length;
+    for (let k = 0; k < pool.length; k++) {
+      const cand = pool[(start + k) % pool.length];
+      if (!usedText[kind].has(cand)) { usedText[kind].add(cand); return cand; }
+    }
+    return pool[start]; // more teams than lines everywhere: repeats allowed at that point
+  };
   return {
     auto: true,
     intro: "Auto-generated the moment the draft closed — grades by the odds book, opinions by the algorithm. The scores will have opinions of their own.",
@@ -1155,8 +1201,8 @@ function buildAutoRecap(rosters) {
       return {
         owner: t.owner,
         grade: grades[Math.min(i, grades.length - 1)],
-        tagline: pick(BANK[arch].tag, t.owner + "tag"),
-        blurb: sub(pick(BANK[arch].blurb, t.owner + eventName())),
+        tagline: pick("tag", arch, t.owner + "tag"),
+        blurb: sub(pick("blurb", arch, t.owner + eventName())),
         chips: [
           { kind: "steal", text: `💎 Value: ${t.steal.name}${t.steal.odds != null ? " " + fmtOdds(t.steal.odds) : ""}` },
           { kind: "reach", text: `🚩 Reach: ${t.reach.name}` }
@@ -1184,10 +1230,23 @@ let openTier = null;
 function renderTierPicker() {
   const tiers = tierAssignments() || {};
   const T = numTiers(), M = picksPerTier(), total = T * M;
-  const mine = myTierPicks().filter(g => S.golfers[g]);
+  const who = tierOwnerEditing();
+  const mine = (who && (S.tierPicks || {})[who] || []).filter(g => S.golfers[g]);
   const mineSet = new Set(mine);
   const countInTier = t => mine.filter(g => tiers[g] === t).length;
-  const selecting = phase() === "draft" && !revealed() && !!me.owner;
+  const selecting = phase() === "draft" && !revealed() && !!who;
+
+  // admin: choose which team's picks are being edited
+  const whoWrap = $("tierWhoWrap");
+  const showWho = me.admin && phase() === "draft" && !revealed();
+  whoWrap.classList.toggle("hidden", !showWho);
+  if (showWho) {
+    const sel = $("tierWho");
+    if (document.activeElement !== sel) {
+      sel.innerHTML = owners().map(o =>
+        `<option value="${esc(o)}"${o === who ? " selected" : ""}>${esc(o)}${o === me.owner ? " (you)" : ""} — ${((S.tierPicks || {})[o] || []).length}/${total}</option>`).join("");
+    }
+  }
   if (openTier == null || openTier > T) {
     openTier = 1;
     for (let t = 1; t <= T; t++) if (countInTier(t) < M) { openTier = t; break; }
@@ -1198,7 +1257,7 @@ function renderTierPicker() {
   ti.classList.remove("hidden");
   ti.textContent = phase() === "setup" ? `Tier pool: pick ${M} from each of ${T} tiers once the admin opens picks`
     : revealed() || draftDone() ? `Tier pool — picks revealed`
-    : me.owner ? `📝 Pick ${M} from each tier — ${mine.length}/${total} picked${mine.length >= total ? " ✅ all in!" : ""} · hidden from other teams until reveal`
+    : who ? `📝 ${who === me.owner ? "Pick" : `Picking for ${who}:`} ${M} from each tier — ${mine.length}/${total} picked${mine.length >= total ? " ✅ all in!" : ""} · hidden from other teams until reveal`
     : `📝 Picks are open — hidden until reveal`;
 
   const q = normName($("golferSearch").value || "");
@@ -1253,17 +1312,18 @@ function renderTierPicker() {
 }
 
 function toggleTierPick(gid) {
-  if (!(draftType() === "tier" && phase() === "draft" && !revealed() && me.owner)) return;
+  const who = tierOwnerEditing();
+  if (!(draftType() === "tier" && phase() === "draft" && !revealed() && who)) return;
   const tiers = tierAssignments() || {};
-  const mine = myTierPicks().filter(g => S.golfers[g]);
+  const mine = ((S.tierPicks || {})[who] || []).filter(g => S.golfers[g]);
   const i = mine.indexOf(gid);
-  if (i >= 0) { mine.splice(i, 1); S.tierPicks[me.owner] = mine; writeTierPicks(mine); render(); return; }
+  if (i >= 0) { mine.splice(i, 1); S.tierPicks[who] = mine; writeTierPicks(who, mine); render(); return; }
   const t = tiers[gid];
   const cnt = mine.filter(g => tiers[g] === t).length;
   if (cnt >= picksPerTier()) { alert(`Tier ${t} is full (${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""}) — unpick someone first.`); return; }
   mine.push(gid);
-  S.tierPicks[me.owner] = mine; // optimistic local update; the DB listener confirms
-  writeTierPicks(mine);
+  S.tierPicks[who] = mine; // optimistic local update; the DB listener confirms
+  writeTierPicks(who, mine);
   if (cnt + 1 >= picksPerTier()) {
     for (let nt = 1; nt <= numTiers(); nt++) {
       if (mine.filter(g => tiers[g] === nt).length < picksPerTier()) { openTier = nt; break; }
@@ -1625,6 +1685,8 @@ $("pzResetBtn").addEventListener("click", () => {
 
 $("switchEventBtn").addEventListener("click", switchEvent);
 $("revealBtn").addEventListener("click", revealPicks);
+$("savePassBtn").addEventListener("click", changeAdminPass);
+$("tierWho").addEventListener("change", () => { tierTarget = $("tierWho").value; openTier = null; renderDraft(); });
 $("pastBody").addEventListener("click", async e => {
   const key = e.target.dataset?.archdel;
   if (!key || !me.admin) return;
@@ -1667,13 +1729,15 @@ $("fixTable").addEventListener("click", e => {
   }).then(() => renderStandings());
 });
 
-// restore admin session
-(async () => {
+// restore admin session (server-verified: the write only succeeds with the right passphrase)
+firebase.auth().onAuthStateChanged(async u => {
+  if (!u || me.admin) return;
   const saved = localStorage.getItem("op26_admin");
-  if (saved && (await sha256Hex(saved)) === ADMIN_HASH) {
+  if (!saved) return;
+  try {
+    await db.ref("admin/authorized/" + u.uid).set(await sha256Hex(saved));
     me.admin = true;
-    firebase.auth().onAuthStateChanged(u => { if (u) { db.ref("admin/authorized/" + u.uid).set(ADMIN_HASH).catch(() => {}); subscribeAdminStats(); } });
     subscribeAdminStats();
     render();
-  }
-})();
+  } catch (e) { localStorage.removeItem("op26_admin"); }
+});

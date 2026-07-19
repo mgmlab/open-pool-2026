@@ -1,7 +1,7 @@
 {
   "rules": {
     "admin": {
-      "passHash": { ".read": false, ".write": false },
+      "passHash": { ".read": false, ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()" },
       "authorized": {
         "$uid": {
           ".write": "auth != null && $uid === auth.uid && newData.val() === root.child('admin/passHash').val()"
