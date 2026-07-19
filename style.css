@@ -183,6 +183,7 @@ td.manual { color: #6ab0ff; }
 #eventSelect { max-width: 100%; }
 .archive-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .archive-card h4 { margin-bottom: 4px; }
+.arch-del { padding: 1px 8px; font-size: 0.75rem; margin-left: 8px; border-color: #7a2e2e; color: #ffb3b3; }
 .archive-card table { max-width: 360px; font-size: 0.85rem; }
 .roster-card.flash { outline: 2px solid var(--gold); box-shadow: 0 0 16px rgba(245, 197, 24, 0.35); }
 #lbPanel { scroll-margin-top: 90px; }

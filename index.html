@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
 <header>
@@ -131,9 +131,9 @@
         </label>
         <br><label class="muted small" id="roundsWrap">Rounds per team: <input type="number" id="roundsInput" min="1" max="30" style="width:80px"></label>
         <span id="tierWrap" class="hidden">
-          <label class="muted small">Tiers: <input type="number" id="tiersInput" min="1" max="15" style="width:70px"></label>
-          <label class="muted small">Picks per tier: <input type="number" id="perTierInput" min="1" max="10" style="width:70px"></label>
-          <span class="muted small" id="tierMath"></span>
+          <label class="muted small">Number of tiers: <input type="number" id="tiersInput" min="1" max="15" style="width:70px"></label>
+          <br><label class="muted small">Picks per tier: <input type="number" id="perTierInput" min="1" max="10" style="width:70px"></label>
+          <br><span class="muted small" id="tierMath"></span>
         </span>
         <br><label class="muted small">Top golfers counted toward score: <input type="number" id="topCountInput" min="1" max="30" style="width:80px"></label>
         <br><button id="saveConfig">Save league setup</button>
@@ -216,6 +216,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

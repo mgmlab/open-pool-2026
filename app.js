@@ -580,10 +580,15 @@ async function fullReset() {
 /* ================= ESPN SCORING ================= */
 async function fetchScores(manual) {
   try {
+    const wantId = currentEventId();
     const res = await fetch(espnUrl());
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    const ev = data.events && data.events[0];
+    let ev = data.events && data.events[0];
+    // guard: never show another tournament's scores — if ESPN hands back a different
+    // event (or the pool switched events mid-flight), treat it as "no data yet"
+    if (ev && String(ev.id) !== String(wantId)) ev = null;
+    if (wantId !== currentEventId()) return;
     const comp = ev && ev.competitions && ev.competitions[0];
     espn.eventName = ev ? ev.name : null;
     espn.eventStatus = ev?.status?.type?.name || null;
@@ -731,9 +736,9 @@ function renderPastTournaments() {
   $("pastPanel").classList.toggle("hidden", !archives);
   if (!archives) return;
   const list = Object.entries(archives).sort((a, b) => (b[1].archivedAt || 0) - (a[1].archivedAt || 0));
-  $("pastBody").innerHTML = list.map(([, a]) =>
+  $("pastBody").innerHTML = list.map(([key, a]) =>
     `<div class="archive-card">` +
-    `<h4>${esc(a.name || "Tournament")}${a.archivedAt ? ` <span class="muted small">${new Date(a.archivedAt).toLocaleDateString()}</span>` : ""}</h4>` +
+    `<h4>${esc(a.name || "Tournament")}${a.archivedAt ? ` <span class="muted small">${new Date(a.archivedAt).toLocaleDateString()}</span>` : ""}${me.admin ? ` <button class="arch-del" data-archdel="${esc(key)}" title="delete this archive">✕</button>` : ""}</h4>` +
     (a.payouts || []).map(p =>
       `<div class="small" style="padding:2px 0">${esc(p.emoji || "💰")} ${esc(p.label)}: <b>${esc((p.names || []).join(" & ") || "—")}</b>${p.value != null ? ` (${fmtToPar(p.value)})` : ""}${p.amount ? ` <span class="muted">· ${esc(String(p.amount))}</span>` : ""}</div>`).join("") +
     `<div class="table-wrap" style="margin-top:8px"><table><tr><th>#</th><th>Team</th><th class=num>Top ${a.topCount || ""}</th></tr>` +
@@ -986,8 +991,20 @@ function computeStandings() {
 }
 
 /* ================= RENDER ================= */
+let espnTrackedId = null;
 function render() {
+  // if the admin switched tournaments, every open page drops the old event's scores immediately
+  const evId = currentEventId();
+  if (espnTrackedId !== evId) {
+    const hadData = espnTrackedId !== null;
+    espnTrackedId = evId;
+    if (hadData) {
+      espn.competitors = []; espn.byNorm = {}; espn.eventStatus = null; espn.eventName = null; espn.fetchedAt = 0; espn.error = null;
+      fetchScores(false);
+    }
+  }
   ensureTierPickSubs();
+  maybeAutoRecap();
   renderConn();
   renderBanner();
   renderAutodraft();
@@ -1062,6 +1079,91 @@ function renderSeatBar() {
   sel.innerHTML = open.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
   if (open.includes(prev)) sel.value = prev;
   sel.classList.remove("hidden"); btn.classList.remove("hidden");
+}
+
+/* ---- auto draft recap: written to /config/recap by the admin's page the moment a
+   draft completes (snake) or is revealed (tier). Odds-driven grades, taglines and
+   value/reach picks; deterministic per team so every client would agree. ---- */
+let autoRecapTried = false;
+function maybeAutoRecap() {
+  if (autoRecapTried || !me.admin || !S.loaded) return;
+  if (phase() === "setup" || !draftDone()) return;
+  if (S.config && S.config.recap) return;
+  if (!Object.keys(S.golfers || {}).length) return;
+  const rosters = owners().map(o => ({ owner: o, roster: teamRoster(o) }));
+  if (!rosters.length || rosters.some(r => !r.roster.length)) return; // every team needs picks
+  autoRecapTried = true;
+  db.ref("config/recap").set(buildAutoRecap(rosters)).catch(() => { autoRecapTried = false; });
+}
+
+function hashStr(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+
+function buildAutoRecap(rosters) {
+  const ranked = Object.entries(S.golfers).map(([gid, g]) => ({ gid, ...g })).sort(golferCompare);
+  const rank = {}; ranked.forEach((g, i) => { rank[g.gid] = i + 1; });
+  const F = ranked.length;
+  const teams = rosters.map(({ owner, roster }) => {
+    const n = roster.length;
+    const avg = roster.reduce((s, p) => s + (rank[p.gid] || F), 0) / n;
+    const top = roster.slice().sort((a, b) => (rank[a.gid] || F) - (rank[b.gid] || F))[0];
+    let steal = roster[0], stealScore = -1e9, reach = null, reachScore = -1e9;
+    roster.forEach((p, i) => {
+      const slot = n > 1 ? i / (n - 1) : 0; // 0 = first pick, 1 = last
+      const r = rank[p.gid] || F;
+      const sv = slot * F - r;   // late pick, strong rank = steal
+      const rv = r - slot * F;   // early pick, weak rank = reach
+      if (sv > stealScore) { stealScore = sv; steal = p; }
+      if (p !== top && rv > reachScore) { reachScore = rv; reach = p; } // never roast the headliner
+    });
+    if (!reach || reach === steal) reach = roster.find(p => p !== top && p !== steal) || steal;
+    return { owner, avg, steal, reach, top };
+  }).sort((a, b) => a.avg - b.avg);
+
+  const grades = ["A", "A-", "B+", "B+", "B", "B-", "C+", "C", "C-", "D"];
+  const BANK = {
+    chalk: {
+      tag: ["The odds board is a menu and they ordered the specials.", "Chalk never apologizes.", "Vegas would co-sign this roster."],
+      blurb: [
+        "{owner} went straight down the odds board and let the favorites do the talking. {top} headlines a roster the sportsbooks would be proud of. The sneaky one: {steal} at {stealOdds}, grabbed later than the number deserved.",
+        "No hero-ball here — {owner} drafted the names everyone knows. If {top} plays to the number, this team bores its way to the money. {reach} is the lone eyebrow-raiser; the algorithm noticed."
+      ]
+    },
+    balanced: {
+      tag: ["A little chalk, a little chaos.", "Diversified like a retirement portfolio.", "Something for every kind of Sunday."],
+      blurb: [
+        "{owner} mixed favorites with fliers like someone who's done this before. {top} anchors it, {steal} at {stealOdds} is the value the room let slide, and {reach} is the swing that decides how this ages.",
+        "A balanced card from {owner}: chalk up top, spice down low. Best value on the sheet: {steal} at {stealOdds}. Boldest reach: {reach} — respect the conviction, question the timing."
+      ]
+    },
+    longshot: {
+      tag: ["Betting on lightning, twice.", "The longshot lifestyle is a choice.", "Powerball tickets, but they're golfers."],
+      blurb: [
+        "{owner} looked at the favorites and said no thanks. This roster runs on {top} and vibes, with {steal} at {stealOdds} as the math-approved heist. If two of these longshots hit, nobody up top is safe — which is, presumably, the whole plan.",
+        "The board zigged and {owner} zagged. {reach} that early was a choice; {steal} at {stealOdds} that late was a robbery. High ceiling, trapdoor floor."
+      ]
+    }
+  };
+  const pick = (arr, seed) => arr[hashStr(seed) % arr.length];
+  return {
+    auto: true,
+    intro: "Auto-generated the moment the draft closed — grades by the odds book, opinions by the algorithm. The scores will have opinions of their own.",
+    teams: teams.map((t, i) => {
+      const arch = t.avg <= F * 0.33 ? "chalk" : t.avg >= F * 0.55 ? "longshot" : "balanced";
+      const sub = s => s.replaceAll("{owner}", t.owner).replaceAll("{top}", t.top.name)
+        .replaceAll("{steal}", t.steal.name).replaceAll("{stealOdds}", fmtOdds(t.steal.odds) || "no odds")
+        .replaceAll("{reach}", t.reach.name);
+      return {
+        owner: t.owner,
+        grade: grades[Math.min(i, grades.length - 1)],
+        tagline: pick(BANK[arch].tag, t.owner + "tag"),
+        blurb: sub(pick(BANK[arch].blurb, t.owner + eventName())),
+        chips: [
+          { kind: "steal", text: `💎 Value: ${t.steal.name}${t.steal.odds != null ? " " + fmtOdds(t.steal.odds) : ""}` },
+          { kind: "reach", text: `🚩 Reach: ${t.reach.name}` }
+        ]
+      };
+    })
+  };
 }
 
 function renderRecap(recap) {
@@ -1315,7 +1417,7 @@ function renderStandings() {
         [1, 2, 3, 4].map(r => `<td class="num">${Number.isFinite(c.rounds[r]) ? c.rounds[r] : ""}</td>`).join("") +
         `<td class="num">${Number.isFinite(c.totalStrokes) ? c.totalStrokes : ""}</td><td class="${c.out ? "cut" : ""}">${esc(c.detail)}</td></tr>`
       ).join("")
-    : `<tr><td class="muted">No leaderboard data yet${espn.eventStatus === "STATUS_SCHEDULED" ? " — field publishes closer to the first tee time" : ""}.</td></tr>`;
+    : `<tr><td class="muted">No leaderboard data for ${esc(eventName())} yet${espn.eventStatus === "STATUS_SCHEDULED" || !espn.eventStatus ? " — scores appear once the tournament starts" : ""}.</td></tr>`;
 }
 
 function renderAdmin() {
@@ -1523,6 +1625,14 @@ $("pzResetBtn").addEventListener("click", () => {
 
 $("switchEventBtn").addEventListener("click", switchEvent);
 $("revealBtn").addEventListener("click", revealPicks);
+$("pastBody").addEventListener("click", async e => {
+  const key = e.target.dataset?.archdel;
+  if (!key || !me.admin) return;
+  const a = (S.config?.archives || {})[key];
+  if (!confirm(`Delete the archived results for "${a?.name || key}"? This cannot be undone.`)) return;
+  try { await db.ref("config/archives/" + key).set(null); }
+  catch (err) { alert("Couldn't delete: " + err.message); }
+});
 $("savePoolName").addEventListener("click", async () => {
   const name = $("poolNameInput").value.trim();
   try {
