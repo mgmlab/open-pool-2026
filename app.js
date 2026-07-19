@@ -367,6 +367,39 @@ function parseFieldText(text) {
   return { golfers, dupes };
 }
 
+// pull the field from ESPN's event feed (exact spellings = zero match risk); any odds
+// already in the box are carried over by normalized name, so CBS paste + import combine
+async function importField() {
+  $("fieldInfo").textContent = "Importing from ESPN…";
+  try {
+    const res = await fetch(espnUrl());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const names = (data.events?.[0]?.competitions?.[0]?.competitors || [])
+      .map(c => c.athlete?.displayName).filter(Boolean);
+    if (!names.length) {
+      $("fieldInfo").textContent = "";
+      alert(`ESPN hasn't published the field for ${eventName()} yet — it usually appears early in tournament week. Paste the field manually or try again closer to the start.`);
+      return;
+    }
+    const existingOdds = {};
+    let carried = 0;
+    for (const g of Object.values(parseFieldText($("fieldInput").value).golfers)) {
+      if (g.odds != null) existingOdds[normName(g.name)] = g.odds;
+    }
+    names.sort((a, b) => a.localeCompare(b));
+    $("fieldInput").value = names.map(n => {
+      const o = existingOdds[normName(n)];
+      if (o != null) carried++;
+      return o != null ? `${n}, +${o}` : n;
+    }).join("\n");
+    $("fieldInfo").textContent = `Imported ${names.length} golfers from ESPN${carried ? ` (${carried} odds carried over)` : ""} — review, then press Save field.`;
+  } catch (e) {
+    $("fieldInfo").textContent = "";
+    alert("Import failed: " + e.message);
+  }
+}
+
 async function saveField() {
   const { golfers, dupes } = parseFieldText($("fieldInput").value);
   const n = Object.keys(golfers).length;
@@ -1230,6 +1263,7 @@ $("savePoolName").addEventListener("click", async () => {
 });
 $("saveOrder").addEventListener("click", saveOrder);
 $("saveField").addEventListener("click", saveField);
+$("importField").addEventListener("click", importField);
 $("startDraft").addEventListener("click", startDraft);
 $("undoPick").addEventListener("click", undoPick);
 $("resetDraft").addEventListener("click", resetDraft);

@@ -171,6 +171,7 @@ td.manual { color: #6ab0ff; }
 .team-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .team-link:hover { color: var(--green); }
 .roster-card { scroll-margin-top: 90px; }
+#eventSelect { max-width: 100%; }
 .archive-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .archive-card h4 { margin-bottom: 4px; }
 .archive-card table { max-width: 360px; font-size: 0.85rem; }
