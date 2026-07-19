@@ -231,12 +231,36 @@ function golferCompare(a, b) {
   return a.name.localeCompare(b.name);
 }
 
+/* ---- tier draft: rounds are grouped into odds-based tiers; round r drafts only from
+   tier ceil(r / picksPerTier). Rounds = tiers × picksPerTier, so the clock, snake
+   order, autodraft and queues all work unchanged. ---- */
+const draftType = () => ((S.config && S.config.draftType) === "tier" ? "tier" : "snake");
+const numTiers = () => Math.max(1, parseInt(S.config?.tiers, 10) || 1);
+const picksPerTier = () => Math.max(1, parseInt(S.config?.perTier, 10) || 1);
+
+// deterministic buckets: sort by odds (best first, no-odds last alphabetical) and slice
+// into N near-equal tiers — every client computes the identical assignment
+function tierAssignments() {
+  if (draftType() !== "tier") return null;
+  const list = Object.entries(S.golfers || {}).map(([gid, g]) => ({ gid, ...g })).sort(golferCompare);
+  const T = numTiers(), total = list.length, map = {};
+  list.forEach((g, i) => { map[g.gid] = Math.min(T, Math.floor(i * T / total) + 1); });
+  return map;
+}
+
+const currentTier = () => Math.min(numTiers(), Math.floor(Math.floor(currentPick() / numTeams()) / picksPerTier()) + 1);
+
 async function makePick(gid, auto = false) {
   const i = currentPick();
   const owner = onClockOwner();
   const g = S.golfers[gid];
   if (!g || !owner || S.pickedGolfers[gid] != null) return;
   if (!(me.admin || me.owner === owner)) return;
+  const tiers = tierAssignments();
+  if (tiers && tiers[gid] !== currentTier()) {
+    if (!auto) alert(`${g.name} is in Tier ${tiers[gid]} — this round drafts from Tier ${currentTier()}.`);
+    return;
+  }
   if (!auto && !me.admin && !confirm(`Draft ${g.name}?`)) return;
   if (!auto && me.admin && me.owner !== owner && !confirm(`ADMIN: draft ${g.name} for ${owner}?`)) return;
   const updates = {};
@@ -275,16 +299,20 @@ function scheduleAutodraft() {
   setTimeout(async () => {
     // re-verify at fire time — state may have moved, or the flag may have been turned off
     if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
-    // queued golfers first (their own page has it cached; the admin's page reads it on demand)
+    // queued golfers first (their own page has it cached; the admin's page reads it on demand);
+    // in tier mode only golfers from the current tier are eligible — out-of-tier queue
+    // entries are skipped, not consumed, so they fire when their tier comes up
+    const tiers = tierAssignments();
+    const eligible = g => S.golfers[g] && S.pickedGolfers[g] == null && (!tiers || tiers[g] === currentTier());
     let gid = null;
     try {
       const q = me.owner === clockOwner ? (S.myQueue || []) : ((await db.ref("queues/" + clockOwner).once("value")).val() || []);
-      gid = q.find(g => S.golfers[g] && S.pickedGolfers[g] == null) || null;
+      gid = q.find(eligible) || null;
     } catch (e) { /* queue unreadable — fall back to best odds */ }
     if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
     if (!gid) {
       const best = Object.entries(S.golfers)
-        .filter(([g]) => S.pickedGolfers[g] == null)
+        .filter(([g]) => eligible(g))
         .map(([g, v]) => ({ gid: g, ...v }))
         .sort(golferCompare)[0];
       gid = best ? best.gid : null;
@@ -327,14 +355,31 @@ async function saveConfig() {
   const names = [...new Set($("teamNames").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))];
   if (names.length < 2 || names.length > 20) { alert("Enter 2–20 team names, one per line."); return; }
   if (names.some(n => /[.#$/\[\]]/.test(n))) { alert("Team names cannot contain . # $ / [ ]"); return; }
-  const rounds = parseInt($("roundsInput").value, 10);
-  if (!Number.isFinite(rounds) || rounds < 1 || rounds > 30) { alert("Rounds must be 1–30."); return; }
-  if (topCount > rounds) { alert(`Top golfers counted (${topCount}) can't exceed rounds per team (${rounds}).`); return; }
-  if (!confirm(`Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks, best ${topCount} scores count?`)) return;
+  const type = $("draftTypeSel").value === "tier" ? "tier" : "snake";
+  let rounds, tiersN = null, perT = null;
+  if (type === "tier") {
+    tiersN = parseInt($("tiersInput").value, 10);
+    perT = parseInt($("perTierInput").value, 10);
+    if (!Number.isFinite(tiersN) || tiersN < 1 || tiersN > 15) { alert("Tiers must be 1–15."); return; }
+    if (!Number.isFinite(perT) || perT < 1 || perT > 10) { alert("Picks per tier must be 1–10."); return; }
+    rounds = tiersN * perT;
+    if (rounds > 30) { alert(`${tiersN} tiers × ${perT} picks = ${rounds} rounds — keep it 30 or fewer.`); return; }
+  } else {
+    rounds = parseInt($("roundsInput").value, 10);
+    if (!Number.isFinite(rounds) || rounds < 1 || rounds > 30) { alert("Rounds must be 1–30."); return; }
+  }
+  if (topCount > rounds) { alert(`Top golfers counted (${topCount}) can't exceed total picks per team (${rounds}).`); return; }
+  const summary = type === "tier"
+    ? `Save league: ${names.length} teams, TIER draft — ${tiersN} tiers × ${perT} pick(s) = ${rounds} rounds (${names.length * rounds} picks), best ${topCount} scores count?`
+    : `Save league: ${names.length} teams × ${rounds} rounds = ${names.length * rounds} picks, best ${topCount} scores count?`;
+  if (!confirm(summary)) return;
   const ownersMap = {};
   for (const n of names) ownersMap[n] = true;
   // update config subkeys individually so settings like poolName survive a league re-save
-  const updates = { "config/teams": names.length, "config/rounds": rounds, "config/topCount": topCount, "config/owners": ownersMap };
+  const updates = {
+    "config/teams": names.length, "config/rounds": rounds, "config/topCount": topCount, "config/owners": ownersMap,
+    "config/draftType": type, "config/tiers": tiersN, "config/perTier": perT
+  };
   const cur = S.state && Array.isArray(S.state.draftOrder) ? S.state.draftOrder : [];
   const sameSet = cur.length === names.length && cur.every(o => ownersMap[o]) && new Set(cur).size === cur.length;
   updates["state/draftOrder"] = sameSet ? cur : names.slice().sort((a, b) => a.localeCompare(b));
@@ -452,7 +497,19 @@ async function saveField() {
 async function startDraft() {
   if (!draftOrder()) { alert("Set the draft order first."); return; }
   if (!Object.keys(S.golfers).length) { alert("Paste the golfer field first."); return; }
-  if (!confirm("Start the draft?")) return;
+  const tiers = tierAssignments();
+  if (tiers) {
+    const need = numTeams() * picksPerTier();
+    const counts = {};
+    for (const t of Object.values(tiers)) counts[t] = (counts[t] || 0) + 1;
+    for (let t = 1; t <= numTiers(); t++) {
+      if ((counts[t] || 0) < need) {
+        alert(`Tier ${t} only has ${counts[t] || 0} golfers but the draft needs ${need} from it (${numTeams()} teams × ${picksPerTier()} picks). Add golfers or reduce tiers/picks per tier.`);
+        return;
+      }
+    }
+  }
+  if (!confirm(tiers ? `Start the tier draft? ${numTiers()} tiers × ${picksPerTier()} pick(s) each.` : "Start the draft?")) return;
   await db.ref().update({
     schedule: buildSchedule(draftOrder()),
     "state/phase": "draft",
@@ -941,7 +998,7 @@ function renderBanner() {
   else {
     const o = onClockOwner();
     const i = currentPick();
-    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
+    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}${draftType() === "tier" ? ` (Tier ${currentTier()})` : ""}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
     if (o === me.owner) { b.classList.add("me"); b.textContent += "  — THAT'S YOU!"; }
     title = `⏰ ${o} is up — ${poolName()}`;
   }
@@ -984,19 +1041,27 @@ function renderDraft() {
   $("pickPanel").classList.toggle("hidden", !!showRecap);
   if (showRecap) renderRecap(recap);
 
-  // available golfers
+  // available golfers (tier mode: live drafts only show the tier on the clock)
+  const tiers = tierAssignments();
+  const inLiveDraft = phase() === "draft" && !draftDone();
   const q = normName($("golferSearch").value || "");
   const avail = Object.entries(S.golfers || {})
     .filter(([gid]) => S.pickedGolfers[gid] == null)
     .map(([gid, g]) => ({ gid, ...g }))
     .filter(g => !q || normName(g.name).includes(q))
+    .filter(g => !(tiers && inLiveDraft) || tiers[g.gid] === currentTier())
     .sort(golferCompare);
   $("availCount").textContent = `(${avail.length})`;
+  const ti = $("tierInfo");
+  ti.classList.toggle("hidden", !tiers);
+  if (tiers) ti.textContent = inLiveDraft
+    ? `🎯 Drafting from Tier ${currentTier()} of ${numTiers()} (${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""} per tier)`
+    : `Tier draft: ${numTiers()} tiers × ${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""} — tier numbers shown below`;
   const canPick = phase() === "draft" && !draftDone() && (me.admin || me.owner === onClockOwner());
   const canQueue = me.owner && phase() === "draft" && !draftDone();
   const queued = new Set(liveQueue());
   $("golferList").innerHTML = avail.map(g =>
-    `<div class="golfer-row"><span class="name">${esc(g.name)}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>` +
+    `<div class="golfer-row"><span class="name">${esc(g.name)}${tiers && !inLiveDraft ? ` <span class="tierbadge">T${tiers[g.gid]}</span>` : ""}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>` +
     (canQueue ? `<button data-qadd="${esc(g.gid)}" title="add to my queue" ${queued.has(g.gid) ? "disabled" : ""}>➕</button>` : "") +
     `<button data-gid="${esc(g.gid)}" ${canPick ? "" : "disabled"}>Draft</button></div>`
   ).join("") || `<p class="muted">No golfers${Object.keys(S.golfers || {}).length ? " match" : " loaded — admin pastes the field before the draft"}.</p>`;
@@ -1152,10 +1217,22 @@ function renderAdmin() {
   prefill($("teamNames"), owners().join("\n"));
   prefill($("roundsInput"), numRounds());
   prefill($("topCountInput"), numTop());
+  prefill($("tiersInput"), S.config?.tiers ?? "");
+  prefill($("perTierInput"), S.config?.perTier ?? "");
+  const dts = $("draftTypeSel");
+  if (document.activeElement !== dts && !dts.dataset.touched) dts.value = draftType();
+  const tierMode = dts.value === "tier";
+  $("roundsWrap").classList.toggle("hidden", tierMode);
+  $("tierWrap").classList.toggle("hidden", !tierMode);
+  const tn = parseInt($("tiersInput").value, 10), pt = parseInt($("perTierInput").value, 10);
+  $("tierMath").textContent = Number.isFinite(tn) && Number.isFinite(pt) ? `= ${tn * pt} rounds per team` : "";
 
   const inDraft = phase() === "draft" || draftDone();
   $("teamNames").disabled = inDraft;
   $("roundsInput").disabled = inDraft;
+  dts.disabled = inDraft;
+  $("tiersInput").disabled = inDraft;
+  $("perTierInput").disabled = inDraft;
   $("saveOrder").disabled = inDraft;
   $("saveField").disabled = inDraft;
   $("startDraft").disabled = phase() !== "setup";
@@ -1263,6 +1340,9 @@ $("queueList").addEventListener("click", e => {
 $("adminUnlock").addEventListener("click", adminUnlock);
 $("adminPass").addEventListener("keydown", e => { if (e.key === "Enter") adminUnlock(); });
 $("saveConfig").addEventListener("click", saveConfig);
+$("draftTypeSel").addEventListener("change", () => { $("draftTypeSel").dataset.touched = "1"; renderAdmin(); });
+$("tiersInput").addEventListener("input", () => renderAdmin());
+$("perTierInput").addEventListener("input", () => renderAdmin());
 $("pzType").addEventListener("change", () => { $("pzN").style.display = $("pzType").value === "roundLeader" ? "" : "none"; });
 $("pzAddBtn").addEventListener("click", () => {
   const type = $("pzType").value;

@@ -113,6 +113,8 @@ button.danger:hover { border-color: var(--red); }
 .queue-row .name { flex: 1; }
 .queue-row .odds { color: var(--muted); font-size: 0.8em; }
 .queue-row button { padding: 2px 8px; font-size: 0.8rem; }
+.tier-info { color: var(--gold); font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
+.tierbadge { color: var(--muted); font-size: 0.72em; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
 .golfer-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 8px; border-bottom: 1px solid var(--line); gap: 8px;

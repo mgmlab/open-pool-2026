@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Open - 2026 Snake Draft</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
 <header>
@@ -41,6 +41,7 @@
     <div class="draft-layout">
       <div class="panel" id="pickPanel">
         <h2>Available Golfers <span id="availCount" class="muted"></span></h2>
+        <div id="tierInfo" class="tier-info hidden"></div>
         <div id="queueBox" class="queue-box hidden">
           <h3>My Queue <span class="muted small">(auto-picks in order when Autodraft is on)</span></h3>
           <div id="queueList"></div>
@@ -122,7 +123,18 @@
         <h3>League setup</h3>
         <p class="muted small">Team names, one per line. Changing teams resets the draft order and clears seats of removed teams.</p>
         <textarea id="teamNames" rows="7" placeholder="One team name per line"></textarea>
-        <label class="muted small">Rounds per team: <input type="number" id="roundsInput" min="1" max="30" style="width:80px"></label>
+        <label class="muted small">Draft type:
+          <select id="draftTypeSel">
+            <option value="snake">Snake — whole field available every round</option>
+            <option value="tier">Tier — odds-based tiers, one tier per round group</option>
+          </select>
+        </label>
+        <br><label class="muted small" id="roundsWrap">Rounds per team: <input type="number" id="roundsInput" min="1" max="30" style="width:80px"></label>
+        <span id="tierWrap" class="hidden">
+          <label class="muted small">Tiers: <input type="number" id="tiersInput" min="1" max="15" style="width:70px"></label>
+          <label class="muted small">Picks per tier: <input type="number" id="perTierInput" min="1" max="10" style="width:70px"></label>
+          <span class="muted small" id="tierMath"></span>
+        </span>
         <br><label class="muted small">Top golfers counted toward score: <input type="number" id="topCountInput" min="1" max="30" style="width:80px"></label>
         <br><button id="saveConfig">Save league setup</button>
         <div id="orderSelects" class="order-row"></div>
@@ -203,6 +215,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=39"></script>
 </body>
 </html>
