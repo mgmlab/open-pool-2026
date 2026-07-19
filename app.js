@@ -29,7 +29,7 @@ const ADMIN_HASH = "476bd2cff73bedea2bab7696c3e24f09a7fd075c163a4f42a80ee978d56b
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, autodraft: {}, myQueue: [], loaded: false };
+const S = { state: null, config: null, seats: {}, golfers: {}, picks: {}, pickedGolfers: {}, overrides: {}, autodraft: {}, myQueue: [], tierPicks: {}, loaded: false };
 const espn = { competitors: [], byNorm: {}, eventStatus: null, eventName: null, fetchedAt: 0, error: null, par: 70 /* Royal Birkdale; real value read from feed */ };
 const me = { identity: null, owner: null, admin: false };
 
@@ -207,9 +207,16 @@ const numTop = () => Math.max(1, Math.min(S.config && S.config.topCount ? S.conf
 const totalPicks = () => numTeams() * numRounds();
 const draftOrder = () => (S.state && Array.isArray(S.state.draftOrder) && S.state.draftOrder.length === numTeams() ? S.state.draftOrder : null);
 const onClockOwner = () => (phase() === "draft" && currentPick() < totalPicks() ? ownerForPick(currentPick(), draftOrder()) : null);
-const draftDone = () => phase() === "complete" || currentPick() >= totalPicks();
+// tier pools finish only when the admin reveals (phase -> complete); snake finishes by pick count
+const draftDone = () => phase() === "complete" || (draftType() !== "tier" && currentPick() >= totalPicks());
+const revealed = () => !!(S.state && S.state.revealed);
 
 function teamRoster(owner) {
+  if (draftType() === "tier") {
+    return ((S.tierPicks || {})[owner] || [])
+      .filter(gid => S.golfers[gid])
+      .map((gid, i) => ({ gid, idx: i, name: S.golfers[gid].name, odds: S.golfers[gid].odds ?? null }));
+  }
   return Object.values(S.picks || {}).filter(p => p.owner === owner).sort((a, b) => a.idx - b.idx);
 }
 
@@ -248,7 +255,33 @@ function tierAssignments() {
   return map;
 }
 
-const currentTier = () => Math.min(numTiers(), Math.floor(Math.floor(currentPick() / numTeams()) / picksPerTier()) + 1);
+/* tier pools are blind and non-exclusive: every team independently picks
+   picksPerTier golfers from each tier (duplicates across teams allowed), stored
+   privately at /tierPicks/{owner} until the admin reveals. */
+let tierPickRefs = {};
+let tierSubsRevealed = null;
+function ensureTierPickSubs() {
+  if (draftType() !== "tier") return;
+  const rev = revealed();
+  if (tierSubsRevealed !== rev) { // reveal flips read access — resubscribe everything
+    for (const ref of Object.values(tierPickRefs)) ref.off();
+    tierPickRefs = {};
+    tierSubsRevealed = rev;
+  }
+  for (const o of owners()) {
+    if (tierPickRefs[o]) continue;
+    const ref = db.ref("tierPicks/" + o);
+    tierPickRefs[o] = ref;
+    ref.on("value", s => { S.tierPicks[o] = s.val() || []; render(); }, () => { /* not readable yet (pre-reveal) */ });
+  }
+}
+
+const myTierPicks = () => (me.owner && (S.tierPicks || {})[me.owner]) || [];
+async function writeTierPicks(arr) {
+  if (!me.owner) return;
+  try { await db.ref("tierPicks/" + me.owner).set(arr.length ? arr : null); }
+  catch (e) { alert("Couldn't save picks — admin may still need to update the database rules. (" + e.message + ")"); }
+}
 
 async function makePick(gid, auto = false) {
   const i = currentPick();
@@ -256,11 +289,7 @@ async function makePick(gid, auto = false) {
   const g = S.golfers[gid];
   if (!g || !owner || S.pickedGolfers[gid] != null) return;
   if (!(me.admin || me.owner === owner)) return;
-  const tiers = tierAssignments();
-  if (tiers && tiers[gid] !== currentTier()) {
-    if (!auto) alert(`${g.name} is in Tier ${tiers[gid]} — this round drafts from Tier ${currentTier()}.`);
-    return;
-  }
+  if (draftType() === "tier") return; // tier pools use toggleTierPick, not turn-based picks
   if (!auto && !me.admin && !confirm(`Draft ${g.name}?`)) return;
   if (!auto && me.admin && me.owner !== owner && !confirm(`ADMIN: draft ${g.name} for ${owner}?`)) return;
   const updates = {};
@@ -289,6 +318,7 @@ async function makePick(gid, auto = false) {
 const autodraftOn = (owner) => !!(S.autodraft || {})[owner];
 let autodraftArmedFor = -1;
 function scheduleAutodraft() {
+  if (draftType() === "tier") return; // no clock, nothing to autodraft
   if (!(phase() === "draft" && !draftDone())) return;
   const clockOwner = onClockOwner();
   if (!clockOwner || !autodraftOn(clockOwner)) return;
@@ -299,20 +329,16 @@ function scheduleAutodraft() {
   setTimeout(async () => {
     // re-verify at fire time — state may have moved, or the flag may have been turned off
     if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
-    // queued golfers first (their own page has it cached; the admin's page reads it on demand);
-    // in tier mode only golfers from the current tier are eligible — out-of-tier queue
-    // entries are skipped, not consumed, so they fire when their tier comes up
-    const tiers = tierAssignments();
-    const eligible = g => S.golfers[g] && S.pickedGolfers[g] == null && (!tiers || tiers[g] === currentTier());
+    // queued golfers first (their own page has it cached; the admin's page reads it on demand)
     let gid = null;
     try {
       const q = me.owner === clockOwner ? (S.myQueue || []) : ((await db.ref("queues/" + clockOwner).once("value")).val() || []);
-      gid = q.find(eligible) || null;
+      gid = q.find(g => S.golfers[g] && S.pickedGolfers[g] == null) || null;
     } catch (e) { /* queue unreadable — fall back to best odds */ }
     if (!(phase() === "draft" && onClockOwner() === clockOwner && autodraftOn(clockOwner) && currentPick() === i)) return;
     if (!gid) {
       const best = Object.entries(S.golfers)
-        .filter(([g]) => eligible(g))
+        .filter(([g]) => S.pickedGolfers[g] == null)
         .map(([g, v]) => ({ gid: g, ...v }))
         .sort(golferCompare)[0];
       gid = best ? best.gid : null;
@@ -499,17 +525,20 @@ async function startDraft() {
   if (!Object.keys(S.golfers).length) { alert("Paste the golfer field first."); return; }
   const tiers = tierAssignments();
   if (tiers) {
-    const need = numTeams() * picksPerTier();
+    // shared pool: each tier just needs enough golfers for one team's quota
     const counts = {};
     for (const t of Object.values(tiers)) counts[t] = (counts[t] || 0) + 1;
     for (let t = 1; t <= numTiers(); t++) {
-      if ((counts[t] || 0) < need) {
-        alert(`Tier ${t} only has ${counts[t] || 0} golfers but the draft needs ${need} from it (${numTeams()} teams × ${picksPerTier()} picks). Add golfers or reduce tiers/picks per tier.`);
+      if ((counts[t] || 0) < picksPerTier()) {
+        alert(`Tier ${t} only has ${counts[t] || 0} golfers but each team picks ${picksPerTier()} from it. Add golfers or reduce tiers/picks per tier.`);
         return;
       }
     }
+    if (!confirm(`Open tier picks? Everyone picks ${picksPerTier()} golfer(s) from each of ${numTiers()} tiers, in private, until you press Reveal.`)) return;
+    await db.ref().update({ "state/phase": "draft", "state/currentPick": 0, "state/revealed": null });
+    return;
   }
-  if (!confirm(tiers ? `Start the tier draft? ${numTiers()} tiers × ${picksPerTier()} pick(s) each.` : "Start the draft?")) return;
+  if (!confirm("Start the draft?")) return;
   await db.ref().update({
     schedule: buildSchedule(draftOrder()),
     "state/phase": "draft",
@@ -534,7 +563,7 @@ async function undoPick() {
 async function resetDraft() {
   if (!confirm("Reset the draft? All picks are erased (field & seats kept).")) return;
   if (!confirm("Are you sure? This cannot be undone.")) return;
-  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, "config/recap": null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || owners() } });
+  await db.ref().update({ picks: null, pickedGolfers: null, schedule: null, tierPicks: null, "config/recap": null, state: { phase: "setup", currentPick: 0, draftOrder: draftOrder() || owners() } });
 }
 
 async function fullReset() {
@@ -542,6 +571,7 @@ async function fullReset() {
   if (!confirm("Really erase everything?")) return;
   await db.ref().update({
     picks: null, pickedGolfers: null, schedule: null, golfers: null, seats: null, overrides: null,
+    tierPicks: null,
     "config/recap": null,
     state: { phase: "setup", currentPick: 0, draftOrder: owners() }
   });
@@ -686,6 +716,8 @@ async function switchEvent() {
   updates["golfers"] = null;
   updates["overrides"] = null;
   updates["autodraft"] = null;
+  updates["tierPicks"] = null;
+  updates["state/revealed"] = null;
   for (const o of owners()) updates["queues/" + o] = null;
   try { await db.ref().update(updates); }
   catch (e) { alert("Switch failed: " + e.message); return; }
@@ -955,6 +987,7 @@ function computeStandings() {
 
 /* ================= RENDER ================= */
 function render() {
+  ensureTierPickSubs();
   renderConn();
   renderBanner();
   renderAutodraft();
@@ -967,7 +1000,7 @@ function render() {
 
 function renderAutodraft() {
   const wrap = $("autodraftWrap"), chk = $("autodraftChk"), ab = $("autodraftBanner");
-  const eligible = me.owner && phase() === "draft" && !draftDone();
+  const eligible = me.owner && phase() === "draft" && !draftDone() && draftType() !== "tier";
   wrap.classList.toggle("hidden", !eligible);
   chk.checked = !!(me.owner && autodraftOn(me.owner));
   const show = eligible && autodraftOn(me.owner);
@@ -995,10 +1028,20 @@ function renderBanner() {
     else { b.textContent = "✅ Draft complete — scores update during " + eventName(); b.classList.add("done"); }
     title = "🏆 " + poolName();
   }
+  else if (draftType() === "tier") {
+    const total = numTiers() * picksPerTier();
+    const n = myTierPicks().filter(g => S.golfers[g]).length;
+    if (me.owner && n >= total) { b.textContent = "✅ Your picks are in — waiting for the reveal"; b.classList.add("done"); }
+    else {
+      b.textContent = `📝 TIER PICKS OPEN — choose ${picksPerTier()} from each of ${numTiers()} tiers (hidden until reveal)`;
+      if (me.owner) b.classList.add("me");
+    }
+    title = `📝 Picks open — ${poolName()}`;
+  }
   else {
     const o = onClockOwner();
     const i = currentPick();
-    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}${draftType() === "tier" ? ` (Tier ${currentTier()})` : ""}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
+    b.textContent = `⏰ ON THE CLOCK: ${o} — Round ${Math.floor(i / numTeams()) + 1}, Pick ${i % numTeams() + 1} (#${i + 1} overall)`;
     if (o === me.owner) { b.classList.add("me"); b.textContent += "  — THAT'S YOU!"; }
     title = `⏰ ${o} is up — ${poolName()}`;
   }
@@ -1033,6 +1076,108 @@ function renderRecap(recap) {
   ).join("");
 }
 
+/* accordion pick UI for tier pools: expand a tier to see its golfers, tap to
+   pick/unpick; a filled tier auto-collapses and opens the next incomplete one */
+let openTier = null;
+function renderTierPicker() {
+  const tiers = tierAssignments() || {};
+  const T = numTiers(), M = picksPerTier(), total = T * M;
+  const mine = myTierPicks().filter(g => S.golfers[g]);
+  const mineSet = new Set(mine);
+  const countInTier = t => mine.filter(g => tiers[g] === t).length;
+  const selecting = phase() === "draft" && !revealed() && !!me.owner;
+  if (openTier == null || openTier > T) {
+    openTier = 1;
+    for (let t = 1; t <= T; t++) if (countInTier(t) < M) { openTier = t; break; }
+  }
+  $("queueBox").classList.add("hidden");
+  $("availCount").textContent = "";
+  const ti = $("tierInfo");
+  ti.classList.remove("hidden");
+  ti.textContent = phase() === "setup" ? `Tier pool: pick ${M} from each of ${T} tiers once the admin opens picks`
+    : revealed() || draftDone() ? `Tier pool — picks revealed`
+    : me.owner ? `📝 Pick ${M} from each tier — ${mine.length}/${total} picked${mine.length >= total ? " ✅ all in!" : ""} · hidden from other teams until reveal`
+    : `📝 Picks are open — hidden until reveal`;
+
+  const q = normName($("golferSearch").value || "");
+  let html = "";
+  for (let t = 1; t <= T; t++) {
+    const cnt = countInTier(t);
+    const open = openTier === t;
+    html += `<div class="tier-head${open ? " open" : ""}" data-tierhead="${t}">` +
+      `<span>${open ? "▾" : "▸"} Tier ${t}</span><span class="muted small">${me.owner && phase() !== "setup" ? `${cnt}/${M}${cnt >= M ? " ✓" : ""}` : ""}</span></div>`;
+    if (!open) continue;
+    const rows = Object.entries(S.golfers || {})
+      .map(([gid, g]) => ({ gid, ...g }))
+      .filter(g => tiers[g.gid] === t)
+      .filter(g => !q || normName(g.name).includes(q))
+      .sort(golferCompare);
+    html += rows.map(g => {
+      const picked = mineSet.has(g.gid);
+      const btn = selecting
+        ? `<button data-tpick="${esc(g.gid)}" class="${picked ? "tpicked" : ""}">${picked ? "✓ Picked" : "Pick"}</button>`
+        : (picked ? `<span class="counted">✓</span>` : "");
+      return `<div class="golfer-row"><span class="name">${esc(g.name)}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>${btn}</div>`;
+    }).join("") || `<p class="muted small">No golfers${q ? " match" : " in this tier"}.</p>`;
+  }
+  $("golferList").innerHTML = html || `<p class="muted">No golfers loaded — admin imports or pastes the field first.</p>`;
+
+  // board area becomes team progress (counts only pre-reveal; full picks after)
+  const done = revealed() || draftDone();
+  if (!done) {
+    $("board").innerHTML = "<tr><th>Team</th><th>Status</th></tr>" + owners().map(o => {
+      const n = (S.tierPicks[o] || []).length;
+      const st = (o === me.owner || S.tierPicks[o] !== undefined && S.tierPicks[o].length)
+        ? `${n}/${total} picked${n >= total ? " ✅" : ""}`
+        : "🔒 hidden until reveal";
+      return `<tr><td><b>${esc(o)}</b>${o === me.owner ? " ⭐" : ""}</td><td>${o === me.owner ? `${mine.length}/${total} picked${mine.length >= total ? " ✅" : ""}` : (me.admin ? st : "🔒 hidden until reveal")}</td></tr>`;
+    }).join("");
+    $("pickLog").innerHTML = `<div class="muted">Everyone picks in private — rosters appear when the admin reveals.</div>`;
+  } else {
+    const order = owners();
+    let bh = "<tr><th>Tier</th>" + order.map(o => `<th${o === me.owner ? ' class="mycol"' : ""}>${esc(o)}</th>`).join("") + "</tr>";
+    for (let t = 1; t <= T; t++) {
+      for (let k = 0; k < M; k++) {
+        bh += `<tr><th>${k === 0 ? "T" + t : ""}</th>` + order.map(o => {
+          const gs = ((S.tierPicks[o] || []).filter(g => tiers[g] === t));
+          const gid = gs[k];
+          return `<td class="${gid ? "filled" : ""}">${gid && S.golfers[gid] ? esc(S.golfers[gid].name) : ""}</td>`;
+        }).join("") + "</tr>";
+      }
+    }
+    $("board").innerHTML = bh;
+    $("pickLog").innerHTML = "";
+  }
+}
+
+function toggleTierPick(gid) {
+  if (!(draftType() === "tier" && phase() === "draft" && !revealed() && me.owner)) return;
+  const tiers = tierAssignments() || {};
+  const mine = myTierPicks().filter(g => S.golfers[g]);
+  const i = mine.indexOf(gid);
+  if (i >= 0) { mine.splice(i, 1); S.tierPicks[me.owner] = mine; writeTierPicks(mine); render(); return; }
+  const t = tiers[gid];
+  const cnt = mine.filter(g => tiers[g] === t).length;
+  if (cnt >= picksPerTier()) { alert(`Tier ${t} is full (${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""}) — unpick someone first.`); return; }
+  mine.push(gid);
+  S.tierPicks[me.owner] = mine; // optimistic local update; the DB listener confirms
+  writeTierPicks(mine);
+  if (cnt + 1 >= picksPerTier()) {
+    for (let nt = 1; nt <= numTiers(); nt++) {
+      if (mine.filter(g => tiers[g] === nt).length < picksPerTier()) { openTier = nt; break; }
+    }
+  }
+  render();
+}
+
+async function revealPicks() {
+  const total = numTiers() * picksPerTier();
+  const short = owners().filter(o => ((S.tierPicks[o] || []).length) < total);
+  const warnTxt = short.length ? `\n\n⚠ Not finished: ${short.join(", ")}` : "";
+  if (!confirm(`Reveal all picks and lock them? Everyone will see every roster.${warnTxt}`)) return;
+  await db.ref().update({ "state/revealed": true, "state/phase": "complete" });
+}
+
 function renderDraft() {
   // once the draft is complete and a recap has been published, it replaces the pick panel
   const recap = S.config && S.config.recap;
@@ -1041,27 +1186,23 @@ function renderDraft() {
   $("pickPanel").classList.toggle("hidden", !!showRecap);
   if (showRecap) renderRecap(recap);
 
-  // available golfers (tier mode: live drafts only show the tier on the clock)
-  const tiers = tierAssignments();
-  const inLiveDraft = phase() === "draft" && !draftDone();
+  // tier pools get their own selection UI (accordion, blind, non-exclusive)
+  if (draftType() === "tier") { renderTierPicker(); return; }
+
+  // available golfers
+  $("tierInfo").classList.add("hidden");
   const q = normName($("golferSearch").value || "");
   const avail = Object.entries(S.golfers || {})
     .filter(([gid]) => S.pickedGolfers[gid] == null)
     .map(([gid, g]) => ({ gid, ...g }))
     .filter(g => !q || normName(g.name).includes(q))
-    .filter(g => !(tiers && inLiveDraft) || tiers[g.gid] === currentTier())
     .sort(golferCompare);
   $("availCount").textContent = `(${avail.length})`;
-  const ti = $("tierInfo");
-  ti.classList.toggle("hidden", !tiers);
-  if (tiers) ti.textContent = inLiveDraft
-    ? `🎯 Drafting from Tier ${currentTier()} of ${numTiers()} (${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""} per tier)`
-    : `Tier draft: ${numTiers()} tiers × ${picksPerTier()} pick${picksPerTier() > 1 ? "s" : ""} — tier numbers shown below`;
   const canPick = phase() === "draft" && !draftDone() && (me.admin || me.owner === onClockOwner());
   const canQueue = me.owner && phase() === "draft" && !draftDone();
   const queued = new Set(liveQueue());
   $("golferList").innerHTML = avail.map(g =>
-    `<div class="golfer-row"><span class="name">${esc(g.name)}${tiers && !inLiveDraft ? ` <span class="tierbadge">T${tiers[g.gid]}</span>` : ""}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>` +
+    `<div class="golfer-row"><span class="name">${esc(g.name)}</span><span class="odds">${esc(fmtOdds(g.odds))}</span>` +
     (canQueue ? `<button data-qadd="${esc(g.gid)}" title="add to my queue" ${queued.has(g.gid) ? "disabled" : ""}>➕</button>` : "") +
     `<button data-gid="${esc(g.gid)}" ${canPick ? "" : "disabled"}>Draft</button></div>`
   ).join("") || `<p class="muted">No golfers${Object.keys(S.golfers || {}).length ? " match" : " loaded — admin pastes the field before the draft"}.</p>`;
@@ -1160,7 +1301,9 @@ function renderStandings() {
       const nameCell = sc.espnId ? `<span class="golfer-link" data-espnid="${esc(sc.espnId)}" data-gname="${esc(r.pick.name)}">${esc(r.pick.name)}</span>` : esc(r.pick.name);
       return `<tr><td>${isCounted ? '<span class="counted">✓</span> ' : ""}${nameCell}</td><td class="num ${cls}${isCounted ? " counted" : ""}">${total}</td><td class="${cls}">${note}</td></tr>`;
     }).join("");
-    return `<div class="roster-card" data-owner="${esc(t.owner)}"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || "<tr><td colspan=3 class=muted>no picks</td></tr>"}</table></div>`;
+    const emptyMsg = draftType() === "tier" && !revealed() && !draftDone() && t.owner !== me.owner && !me.admin
+      ? "🔒 picks hidden until reveal" : "no picks";
+    return `<div class="roster-card" data-owner="${esc(t.owner)}"><h4>${esc(t.owner)}</h4><table><tr><th>Golfer</th><th class=num>To Par</th><th>Status</th></tr>${rows || `<tr><td colspan=3 class=muted>${emptyMsg}</td></tr>`}</table></div>`;
   }).join("");
 
   // official leaderboard
@@ -1233,6 +1376,8 @@ function renderAdmin() {
   dts.disabled = inDraft;
   $("tiersInput").disabled = inDraft;
   $("perTierInput").disabled = inDraft;
+  $("revealBtn").classList.toggle("hidden", !(draftType() === "tier" && phase() === "draft" && !revealed()));
+  $("undoPick").disabled = currentPick() === 0 || draftType() === "tier";
   $("saveOrder").disabled = inDraft;
   $("saveField").disabled = inDraft;
   $("startDraft").disabled = phase() !== "setup";
@@ -1325,6 +1470,10 @@ $("autodraftChk").addEventListener("change", async e => {
 });
 $("golferSearch").addEventListener("input", renderDraft);
 $("golferList").addEventListener("click", e => {
+  const th = e.target.closest?.("[data-tierhead]");
+  if (th) { const t = Number(th.dataset.tierhead); openTier = openTier === t ? 0 : t; renderDraft(); return; }
+  const tp = e.target.dataset?.tpick;
+  if (tp) { toggleTierPick(tp); return; }
   const qadd = e.target.dataset?.qadd;
   if (qadd) { writeQueue([...liveQueue(), qadd]); return; }
   const gid = e.target.dataset?.gid;
@@ -1373,6 +1522,7 @@ $("pzResetBtn").addEventListener("click", () => {
 });
 
 $("switchEventBtn").addEventListener("click", switchEvent);
+$("revealBtn").addEventListener("click", revealPicks);
 $("savePoolName").addEventListener("click", async () => {
   const name = $("poolNameInput").value.trim();
   try {

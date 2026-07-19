@@ -64,6 +64,13 @@
         ".write": "auth != null && $id === auth.uid"
       }
     },
+    "tierPicks": {
+      ".write": "auth != null && root.child('admin/authorized').child(auth.uid).exists()",
+      "$owner": {
+        ".read": "auth != null && (root.child('seats').child($owner).val() === auth.uid || root.child('admin/authorized').child(auth.uid).exists() || root.child('state/revealed').val() === true)",
+        ".write": "auth != null && ((root.child('seats').child($owner).val() === auth.uid && root.child('state/revealed').val() !== true) || root.child('admin/authorized').child(auth.uid).exists())"
+      }
+    },
     "queues": {
       "$owner": {
         ".read": "auth != null && (root.child('seats').child($owner).val() === auth.uid || root.child('admin/authorized').child(auth.uid).exists())",
